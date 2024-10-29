@@ -107,5 +107,5 @@ def default_model_configuration() -> Tuple[str, str, str]:
             "meta/llama-3.1-405b-instruct"
         )
     }
-    processor, accelerator = recommended.get(provider, recommended["nvidia"])
+    processor, accelerator = recommended.get(provider, ("gpt-4o", "gpt-4o-mini"))
     return provider, processor, accelerator
