@@ -102,7 +102,12 @@ def default_model_configuration() -> tuple[str, str, str]:
             "databricks-meta-llama-3-1-70b-instruct",
             "databricks-meta-llama-3-1-70b-instruct",
         ),
+        "nvidia": (
+            "meta/llama-3.1-405b-instruct",
+            "meta/llama-3.1-405b-instruct"
+        ),
         "google": ("gemini-1.5-flash", "gemini-1.5-flash"),
+
     }
     processor, accelerator = recommended.get(provider, ("gpt-4o", "gpt-4o-mini"))
     return provider, processor, accelerator
