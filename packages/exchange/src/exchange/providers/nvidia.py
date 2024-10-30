@@ -2,7 +2,7 @@ import os
 from typing import Any, Dict, List, Tuple, Type
 
 import httpx
-from httpx._auth import FunctionAuth 
+from httpx._auth import FunctionAuth
 
 from exchange.message import Message
 from exchange.providers.base import Provider, Usage
@@ -98,7 +98,7 @@ class NVIDIAProvider(Provider):
     @retry_procedure
     def _post(self, payload: dict) -> dict:
         response = self.client.post(
-            "v1/chat/completions", 
+            "v1/chat/completions",
             json=payload,
         )
         return raise_for_status(response).json()
