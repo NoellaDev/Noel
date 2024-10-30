@@ -45,7 +45,7 @@ class NVIDIAProvider(Provider):
         def _add_key_to_header(r : httpx.Request) -> httpx.Request:
             r.headers["authorization"] = f"Bearer {key}"
             return r
-    
+
         client = httpx.Client(
             base_url=url,
             auth=FunctionAuth(_add_key_to_header),
