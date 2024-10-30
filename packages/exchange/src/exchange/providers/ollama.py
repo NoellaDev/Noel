@@ -1,37 +1,37 @@
 import os
-from typing import Type
 
 import httpx
 
 from exchange.providers.openai import OpenAiProvider
 
 OLLAMA_HOST = "http://localhost:11434/"
-OLLAMA_MODEL = "mistral-nemo"
+OLLAMA_MODEL = "qwen2.5"
 
 
 class OllamaProvider(OpenAiProvider):
     """Provides chat completions for models hosted by Ollama."""
 
-    __doc__ += """Here's an example profile configuration to try:
+    __doc__ += f"""Here's an example profile configuration to try:
 
 First run: ollama pull qwen2.5, then use this profile:
 
 ollama:
   provider: ollama
-  processor: qwen2.5
-  accelerator: qwen2.5
+  processor: {OLLAMA_MODEL}
+  accelerator: {OLLAMA_MODEL}
   moderator: truncate
   toolkits:
   - name: developer
-    requires: {}
+    requires: {{}}
 """
+    PROVIDER_NAME = "ollama"
 
     def __init__(self, client: httpx.Client) -> None:
         print("PLEASE NOTE: the ollama provider is experimental, use with care")
         super().__init__(client)
 
     @classmethod
-    def from_env(cls: Type["OllamaProvider"]) -> "OllamaProvider":
+    def from_env(cls: type["OllamaProvider"]) -> "OllamaProvider":
         ollama_url = os.environ.get("OLLAMA_HOST", OLLAMA_HOST)
         timeout = httpx.Timeout(60 * 10)
 

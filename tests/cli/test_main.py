@@ -34,7 +34,9 @@ def test_session_start_command_with_session_name(mock_session):
     mock_session_class, mock_session_instance = mock_session
     runner = CliRunner()
     runner.invoke(goose_cli, ["session", "start", "session1", "--profile", "default"])
-    mock_session_class.assert_called_once_with(name="session1", profile="default", plan=None, log_level="INFO")
+    mock_session_class.assert_called_once_with(
+        name="session1", profile="default", plan=None, log_level="INFO", tracing=False
+    )
     mock_session_instance.run.assert_called_once()
 
 
@@ -161,3 +163,13 @@ def test_goose_no_args_print_help():
     assert "Usage:" in result.output
     assert "Options:" in result.output
     assert "Commands:" in result.output
+
+
+def test_moderators_list_command():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["moderators", "list"])
+    assert result.exit_code == 0
+    assert "Available moderators:" in result.output
+    assert "passive" in result.output
+    assert "summarize" in result.output
+    assert "truncate" in result.output

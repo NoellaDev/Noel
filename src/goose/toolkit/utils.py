@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional
 
 from pygments.lexers import get_lexer_for_filename
 from pygments.util import ClassNotFound
@@ -7,7 +7,11 @@ from pygments.util import ClassNotFound
 from jinja2 import Environment, FileSystemLoader
 
 
-def get_language(filename: Path) -> str:
+RULESTYLE = "bold"
+RULEPREFIX = f"[{RULESTYLE}]───[/] "
+
+
+def get_language(filename: str) -> str:
     """
     Determine the programming language of a file based on its filename extension.
 
@@ -19,7 +23,7 @@ def get_language(filename: Path) -> str:
     """
     try:
         lexer = get_lexer_for_filename(filename)
-        return lexer.name
+        return lexer.name.lower()
     except ClassNotFound:
         return ""
 
@@ -67,7 +71,7 @@ def find_last_task_group_index(input_str: str) -> int:
     return last_group_start_index
 
 
-def parse_plan(input_plan_str: str) -> Dict:
+def parse_plan(input_plan_str: str) -> dict:
     last_group_start_index = find_last_task_group_index(input_plan_str)
     if last_group_start_index == -1:
         return {"kickoff_message": input_plan_str, "tasks": []}

@@ -10,7 +10,7 @@ Goose is your on-machine developer agent, automating engineering tasks seamlessl
 </p>
 
 <p align="center">
-  <a href="https://block-open-source.github.io/goose/">
+  <a href="https://block.github.io/goose/">
     <img src="https://img.shields.io/badge/Documentation-goose_docs-teal">
   </a>
   <a href=https://pypi.org/project/goose-ai>
@@ -107,7 +107,6 @@ To install Goose, use `pipx`. First ensure [pipx][pipx] is installed:
 brew install pipx
 pipx ensurepath
 ```
-You can also place `.goosehints` in `~/.config/goose/.goosehints` if you like for always loaded hints personal to you.
 
 Then install Goose:
 
@@ -131,7 +130,27 @@ You will see the Goose prompt `G❯`:
 G❯ type your instructions here exactly as you would tell a developer.
 ```
 
-Now you are interacting with Goose in conversational sessions - something like a natural language driven code interpreter. The default toolkit allows Goose to take actions through shell commands and file edits. You can interrupt Goose with `CTRL+D` or `ESC+Enter` at any time to help redirect its efforts.
+Now you are interacting with Goose in conversational sessions - think of it as like giving direction to a junior developer. The default toolkit allows Goose to take actions through shell commands and file edits. You can interrupt Goose with `CTRL+D` or `ESC+Enter` at any time to help redirect its efforts.
+
+> [!TIP]
+> You can place a `.goosehints` text file in any directory you launch goose from to give it some background info for new sessions in plain language (eg how to test, what instructions to read to get started or just tell it to read the README!) You can also put a global one `~/.config/goose/.goosehints` if you like for always loaded hints personal to you.
+
+### Running a goose tasks (one off)
+
+You can run goose to do things just as a one off, such as tidying up, and then exiting: 
+
+```sh
+goose run instructions.md
+```
+
+You can also use process substitution to provide instructions directly from the command line:
+
+```sh
+goose run <(echo "Create a new Python file that prints hello world")
+```
+
+This will run until completion as best it can. You can also pass `--resume-session` and it will re-use the first session it finds for context
+
 
 #### Exit the session
 
@@ -147,15 +166,54 @@ goose session resume
 
 To see more documentation on the CLI commands currently available to Goose check out the documentation [here][cli]. If you’d like to develop your own CLI commands for Goose, check out the [Contributing document][contributing].
 
+### Tracing with Langfuse
+> [!NOTE]
+> This Langfuse integration is experimental and we don't currently have integration tests for it.
+
+The exchange package provides a [Langfuse](https://langfuse.com/) wrapper module. The wrapper serves to initialize Langfuse appropriately if the Langfuse server is running locally and otherwise to skip applying the Langfuse observe descorators.
+
+#### Start your local Langfuse server
+
+Run `just langfuse-server` to start your local Langfuse server. It requires Docker.
+
+Read more about local Langfuse deployments [here](https://langfuse.com/docs/deployment/local).
+
+#### Exchange and Goose integration
+
+Import `from exchange.langfuse_wrapper import observe_wrapper` and use the `observe_wrapper()` decorator on functions you wish to enable tracing for. `observe_wrapper` functions the same way as Langfuse's observe decorator.
+
+Read more about Langfuse's decorator-based tracing [here](https://langfuse.com/docs/sdk/python/decorators).
+
+In Goose, initialization requires certain environment variables to be present:
+
+- `LANGFUSE_PUBLIC_KEY`: Your Langfuse public key
+- `LANGFUSE_SECRET_KEY`: Your Langfuse secret key
+- `LANGFUSE_BASE_URL`: The base URL of your Langfuse instance
+
+By default your local deployment and Goose will use the values in `.env.langfuse.local`.
+
+
+
 ### Next steps
 
 Learn how to modify your Goose profiles.yaml file to add and remove functionality (toolkits) and providing context to get the most out of Goose in our [Getting Started Guide][getting-started].
+
+## Other ways to run goose
 
 **Want to move out of the terminal and into an IDE?**
 
 We have some experimental IDE integrations for VSCode and JetBrains IDEs:
 * https://github.com/square/goose-vscode
 * https://github.com/Kvadratni/goose-intellij
+
+**Goose as a Github Action**
+
+There is also an experimental Github action to run goose as part of your workflow (for example if you ask it to fix an issue): 
+https://github.com/marketplace/actions/goose-ai-developer-agent
+
+**With Docker**
+
+There is also a `Dockerfile` in the root of this project you can use if you want to run goose in a sandboxed fashion.
 
 ## Getting involved!
 
@@ -173,19 +231,19 @@ Let us know what you think in our [Discussions][discussions] or the [**`#goose`*
 [goose-plugins]: https://github.com/block-open-source/goose-plugins
 
 [pipx]: https://github.com/pypa/pipx?tab=readme-ov-file#install-pipx
-[contributing]: https://github.com/block-open-source/goose/blob/main/CONTRIBUTING.md
-[license]: https://github.com/block-open-source/goose/blob/main/LICENSE
+[contributing]: https://github.com/block/goose/blob/main/CONTRIBUTING.md
+[license]: https://github.com/block/goose/blob/main/LICENSE
 
-[goose-docs]: https://block-open-source.github.io/goose/
-[toolkits]: https://block-open-source.github.io/goose/plugins/available-toolkits.html
-[configuration]: https://block-open-source.github.io/goose/configuration.html
-[cli]: https://block-open-source.github.io/goose/plugins/cli.html
-[providers]: https://block-open-source.github.io/goose/providers.html
-[use-cases]: https://block-open-source.github.io/goose/guidance/applications.html
-[getting-started]: https://block-open-source.github.io/goose/guidance/getting-started.html
+[goose-docs]: https://block.github.io/goose/
+[toolkits]: https://block.github.io/goose/plugins/available-toolkits.html
+[configuration]: https://block.github.io/goose/configuration.html
+[cli]: https://block.github.io/goose/plugins/cli.html
+[providers]: https://block.github.io/goose/providers.html
+[use-cases]: https://block.github.io/goose/guidance/applications.html
+[getting-started]: https://block.github.io/goose/guidance/getting-started.html
 
 [discord-invite]: https://discord.gg/7GaTvbDwga
-[gh-issues]: https://github.com/block-open-source/goose/issues
+[gh-issues]: https://github.com/block/goose/issues
 [van-code]: https://github.com/block-open-source/goose-plugins/blob/de98cd6c29f8e7cd3b6ace26535f24ac57c9effa/src/goose_plugins/toolkits/artify.py
-[discussions]: https://github.com/block-open-source/goose/discussions
+[discussions]: https://github.com/block/goose/discussions
 [goose-channel]: https://discord.com/channels/1287729918100246654/1287729920319033345

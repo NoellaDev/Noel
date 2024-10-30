@@ -48,6 +48,21 @@ or, as a shortcut,
 just test
 ```
 
+### Enable traces in Goose with [locally hosted Langfuse](https://langfuse.com/docs/deployment/self-host)
+> [!NOTE]
+> This integration is experimental and we don't currently have integration tests for it.
+ 
+Developers can use locally hosted Langfuse tracing by applying the custom `observe_wrapper` decorator defined in `packages/exchange/src/langfuse_wrapper.py` to functions for automatic integration with Langfuse. 
+
+- Run `just langfuse-server` to start your local Langfuse server. It requires Docker.
+- Go to http://localhost:3000 and log in with the default email/password output by the shell script (values can also be found in the `.env.langfuse.local` file).
+- Run Goose with the --tracing flag enabled i.e., `goose session start --tracing`
+- View your traces at http://localhost:3000
+
+To extend tracing to additional functions, import `from exchange.langfuse_wrapper import observe_wrapper` and use the `observe_wrapper()` decorator on functions you wish to enable tracing for. `observe_wrapper` functions the same way as Langfuse's observe decorator. 
+
+Read more about Langfuse's decorator-based tracing [here](https://langfuse.com/docs/sdk/python/decorators).
+
 ## Exchange
 
 The lower level generation behind goose is powered by the [`exchange`][ai-exchange] package, also in this repo.
@@ -73,11 +88,21 @@ Additions to the [developer toolkit][developer] change the core performance, and
 
 This project follows the [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) specification for PR titles. Conventional Commits make it easier to understand the history of a project and facilitate automation around versioning and changelog generation.
 
-[issues]: https://github.com/block-open-source/goose/issues
+## Release
+
+In order to release a new version of goose, you need to do the following:
+1. Update CHANGELOG.md. To get the commit messages since last release, run: `just release-notes`
+2. Update version in `pyproject.toml` for `goose` and package dependencies such as `exchange`
+3. Create a PR and merge it into main branch
+4. Tag the HEAD commit in main branch. To do this, switch to main branch and run: `just tag-push`
+5. Publish a new release from the [Github Release UI](https://github.com/block/goose/releases)
+
+
+[issues]: https://github.com/block/goose/issues
 [goose-plugins]: https://github.com/block-open-source/goose-plugins
-[ai-exchange]: https://github.com/block-open-source/goose/tree/main/packages/exchange
-[developer]: https://github.com/block-open-source/goose/blob/dfecf829a83021b697bf2ecc1dbdd57d31727ddd/src/goose/toolkit/developer.py
+[ai-exchange]: https://github.com/block/goose/tree/main/packages/exchange
+[developer]: https://github.com/block/goose/blob/dfecf829a83021b697bf2ecc1dbdd57d31727ddd/src/goose/toolkit/developer.py
 [uv]: https://docs.astral.sh/uv/
 [ruff]: https://docs.astral.sh/ruff/
 [just]: https://github.com/casey/just
-[adding-toolkit]: https://block-open-source.github.io/goose/configuration.html#adding-a-toolkit
+[adding-toolkit]: https://block.github.io/goose/configuration.html#adding-a-toolkit

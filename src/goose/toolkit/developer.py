@@ -1,31 +1,17 @@
 import os
 import re
-import subprocess
-import time
+import tempfile
+import httpx
+
 from pathlib import Path
-from typing import Dict, List
 
 from exchange import Message
 from goose.toolkit.base import Toolkit, tool
-from goose.toolkit.utils import get_language, render_template
-from goose.utils.ask import ask_an_ai
-from goose.utils.check_shell_command import is_dangerous_command
+from goose.toolkit.utils import get_language, render_template, RULEPREFIX, RULESTYLE
+from goose.utils.shell import shell
 from rich.markdown import Markdown
-from rich.prompt import Confirm
 from rich.table import Table
-from rich.text import Text
 from rich.rule import Rule
-
-RULESTYLE = "bold"
-RULEPREFIX = f"[{RULESTYLE}]───[/] "
-
-
-def keep_unsafe_command_prompt(command: str) -> bool:
-    command_text = Text(command, style="bold red")
-    message = (
-        Text("\nWe flagged the command: ") + command_text + Text(" as potentially unsafe, do you want to proceed?")
-    )
-    return Confirm.ask(message, default=True)
 
 
 class Developer(Toolkit):
@@ -35,9 +21,10 @@ class Developer(Toolkit):
     We also include some default shell strategies in the prompt, such as using ripgrep
     """
 
-    def __init__(self, *args: object, **kwargs: Dict[str, object]) -> None:
+    def __init__(self, *args: object, **kwargs: dict[str, object]) -> None:
         super().__init__(*args, **kwargs)
-        self.timestamps: Dict[str, float] = {}
+        self.timestamps: dict[str, float] = {}
+        self.cwd = os.getcwd()
 
     def system(self) -> str:
         """Retrieve system configuration details for developer"""
@@ -55,7 +42,7 @@ class Developer(Toolkit):
         return system_prompt
 
     @tool
-    def update_plan(self, tasks: List[dict]) -> List[dict]:
+    def update_plan(self, tasks: list[dict]) -> list[dict]:
         """
         Update the plan by overwriting all current tasks
 
@@ -63,7 +50,7 @@ class Developer(Toolkit):
         shown to the user directly, you do not need to reiterate it
 
         Args:
-            tasks (List(dict)): The list of tasks, where each task is a dictionary
+            tasks (list(dict)): The list of tasks, where each task is a dictionary
                 with a key for the task "description" and the task "status". The status
                 MUST be one of "planned", "complete", "failed", "in-progress".
 
@@ -90,6 +77,39 @@ class Developer(Toolkit):
 
         # Return the tasks unchanged as the function's primary purpose is to update and display the task status.
         return tasks
+
+    @tool
+    def fetch_web_content(self, url: str) -> str:
+        """
+        Fetch content from a URL using httpx.
+
+        Args:
+            url (str): url of the site to visit.
+        Returns:
+            (dict): A dictionary with two keys:
+                - 'html_file_path' (str): Path to a html file which has the content of the page. It will be very large so use rg to search it or head in chunks. Will contain meta data and links and markup.
+                - 'text_file_path' (str): Path to a plain text file which has the some of the content of the page. It will be large so use rg to search it or head in chunks. If content isn't there, try the html variant.
+        """  # noqa
+        friendly_name = re.sub(r"[^a-zA-Z0-9]", "_", url)[:50]  # Limit length to prevent filenames from being too long
+
+        try:
+            result = httpx.get(url, follow_redirects=True).text
+            with tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=f"_{friendly_name}.html") as tmp_file:
+                tmp_file.write(result)
+                tmp_text_file_path = tmp_file.name.replace(".html", ".txt")
+                plain_text = re.sub(
+                    r"<head.*?>.*?</head>|<script.*?>.*?</script>|<style.*?>.*?</style>|<[^>]+>",
+                    "",
+                    result,
+                    flags=re.DOTALL,
+                )  # Remove head, script, and style tags/content, then any other tags
+                with open(tmp_text_file_path, "w") as text_file:
+                    text_file.write(plain_text)
+                return {"html_file_path": tmp_file.name, "text_file_path": tmp_text_file_path}
+        except httpx.HTTPStatusError as exc:
+            self.notifier.log(f"Failed fetching with HTTP error: {exc.response.status_code}")
+        except Exception as exc:
+            self.notifier.log(f"Failed fetching with error: {str(exc)}")
 
     @tool
     def patch_file(self, path: str, before: str, after: str) -> str:
@@ -160,93 +180,7 @@ class Developer(Toolkit):
         # Log the command being executed in a visually structured format (Markdown).
         self.notifier.log(Rule(RULEPREFIX + "shell", style=RULESTYLE, align="left"))
         self.notifier.log(Markdown(f"```bash\n{command}\n```"))
-
-        if is_dangerous_command(command):
-            # Stop the notifications so we can prompt
-            self.notifier.stop()
-            if not keep_unsafe_command_prompt(command):
-                raise RuntimeError(
-                    f"The command {command} was rejected as dangerous by the user."
-                    " Do not proceed further, instead ask for instructions."
-                )
-            self.notifier.start()
-        self.notifier.status("running shell command")
-
-        # Define patterns that might indicate the process is waiting for input
-        interaction_patterns = [
-            r"Do you want to",  # Common prompt phrase
-            r"Enter password",  # Password prompt
-            r"Are you sure",  # Confirmation prompt
-            r"\(y/N\)",  # Yes/No prompt
-            r"Press any key to continue",  # Awaiting keypress
-            r"Waiting for input",  # General waiting message
-        ]
-        compiled_patterns = [re.compile(pattern, re.IGNORECASE) for pattern in interaction_patterns]
-
-        proc = subprocess.Popen(
-            command,
-            shell=True,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-        # this enables us to read lines without blocking
-        os.set_blocking(proc.stdout.fileno(), False)
-
-        # Accumulate the output logs while checking if it might be blocked
-        output_lines = []
-        last_output_time = time.time()
-        cutoff = 10
-        while proc.poll() is None:
-            self.notifier.status("running shell command")
-            line = proc.stdout.readline()
-            if line:
-                output_lines.append(line)
-                last_output_time = time.time()
-
-            # If we see a clear pattern match, we plan to abort
-            exit_criteria = any(pattern.search(line) for pattern in compiled_patterns)
-
-            # and if we haven't seen a new line in 10+s, check with AI to see if it may be stuck
-            if not exit_criteria and time.time() - last_output_time > cutoff:
-                self.notifier.status("checking on shell status")
-                response = ask_an_ai(
-                    input="\n".join([command] + output_lines),
-                    prompt=(
-                        "You will evaluate the output of shell commands to see if they may be stuck."
-                        " Look for commands that appear to be awaiting user input, or otherwise running indefinitely (such as a web service)."  # noqa
-                        " A command that will take a while, such as downloading resources is okay."  # noqa
-                        " return [Yes] if stuck, [No] otherwise."
-                    ),
-                    exchange=self.exchange_view.processor,
-                    with_tools=False,
-                )
-                exit_criteria = "[yes]" in response.content[0].text.lower()
-                # We add exponential backoff for how often we check for the command being stuck
-                cutoff *= 10
-
-            if exit_criteria:
-                proc.terminate()
-                raise ValueError(
-                    f"The command `{command}` looks like it will run indefinitely or is otherwise stuck."
-                    f"You may be able to specify inputs if it applies to this command."
-                    f"Otherwise to enable continued iteration, you'll need to ask the user to run this command in another terminal."  # noqa
-                )
-
-        # read any remaining lines
-        while line := proc.stdout.readline():
-            output_lines.append(line)
-        output = "".join(output_lines)
-
-        # Determine the result based on the return code
-        if proc.returncode == 0:
-            result = "Command succeeded"
-        else:
-            result = f"Command failed with returncode {proc.returncode}"
-
-        # Return the combined result and outputs if we made it this far
-        return "\n".join([result, output])
+        return shell(command, self.notifier, self.exchange_view)
 
     @tool
     def write_file(self, path: str, content: str) -> str:
