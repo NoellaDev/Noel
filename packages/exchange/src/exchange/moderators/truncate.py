@@ -30,7 +30,7 @@ class ContextTruncate(Moderator):
 
     def rewrite(self, exchange: Exchange) -> None:
         """Truncate the exchange messages with a FIFO strategy."""
-        self._update_system_prompt_token_count(exchange)
+        # self._update_system_prompt_token_count(exchange)
 
         if exchange.checkpoint_data.total_token_count < self.max_tokens:
             return

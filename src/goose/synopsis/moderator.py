@@ -47,6 +47,7 @@ class Synopsis(Moderator):
         if home_hints_path.is_file():
             hints.append(render_template(home_hints_path))
         self.hints = "\n".join(hints)
+        self.dynamic_hints = set()
 
     def rewrite(self, exchange: Exchange) -> None:
         # Get the last message, which would be either a user text or a user tool use

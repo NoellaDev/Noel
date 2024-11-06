@@ -19,6 +19,14 @@ from exchange.providers.base import MissingProviderEnvVariableError
 
 def create_exchange(profile: Profile, notifier: SessionNotifier) -> Exchange:
     try:
+        if profile.context:
+            openai_api_key = _get_api_key_from_keychain("OPENAI_API_KEY", "openai")
+            if openai_api_key is None or openai_api_key == "":
+                error_message = f"{e.message}. Please set the OpenAI environment variable required for LanceDB embeddings to use context store."
+                print(Panel(error_message, style="red"))
+                sys.exit(1)
+            else:
+                os.environ["OPENAI_API_KEY"] = openai_api_key
         return build_exchange(profile, notifier=notifier)
     except InvalidChoiceError as e:
         error_message = (

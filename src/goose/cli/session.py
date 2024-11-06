@@ -3,6 +3,8 @@ import logging
 import traceback
 from pathlib import Path
 from typing import Optional
+from git import Repo
+import json
 
 from exchange import Message, Text, ToolResult, ToolUse
 from exchange.langfuse_wrapper import auth_check, observe_wrapper
@@ -23,6 +25,9 @@ from goose.utils import droid, load_plugins
 from goose.utils._cost_calculator import get_total_cost_message
 from goose.utils._create_exchange import create_exchange
 from goose.utils.session_file import is_empty_session, is_existing_session, log_messages, read_or_create_file
+
+from context_manager.developer_hints import get_all_tags, get_hints
+from context_manager.context_db import LanceDBContext
 
 RESUME_MESSAGE = "I see we were interrupted. How can I help you?"
 
@@ -92,7 +97,9 @@ class Session:
         if self.tracing:
             langfuse_context.configure(enabled=tracing)
 
-        self.exchange = create_exchange(profile=load_profile(profile), notifier=self.notifier)
+        profile = load_profile(profile)
+
+        self.exchange = create_exchange(profile=profile, notifier=self.notifier)
         setup_logging(log_file_directory=LOG_PATH, log_level=log_level)
 
         self.exchange.messages.extend(self._get_initial_messages())
@@ -101,6 +108,8 @@ class Session:
             self.setup_plan(plan=plan)
 
         self.prompt_session = GoosePromptSession()
+
+        self.context_db = LanceDBContext(profile.context) if profile.context else None
 
     def _get_initial_messages(self) -> list[Message]:
         messages = self.load_session()
@@ -163,6 +172,26 @@ class Session:
         print(f"[dim]ended run | name: [cyan]{self.name}[/]  profile: [cyan]{profile}[/]")
         print(f"[dim]to resume: [magenta]goose session resume {self.name} --profile {profile}[/][/]")
 
+    @staticmethod
+    def get_short_git_remote_gitpython() -> str:
+        try:
+            repo = Repo(".", search_parent_directories=True)
+            remote = repo.remotes.origin.url
+
+            if remote.endswith(".git"):
+                remote = remote[:-4]
+
+            if remote.startswith("git@") or "@" in remote:
+                # This will handle both:
+                # git@github.com:username/repo
+                # org-123456@github.com:username/repo
+                return remote.split(":")[1]
+            else:
+                # For https://github.com/username/repo
+                return "/".join(remote.split("/")[-2:])
+        except Exception:
+            return None
+
     def run(self, new_session: bool = True) -> None:
         """
         Runs the main loop to handle user inputs and responses.
@@ -179,6 +208,22 @@ class Session:
         print(f"[dim]starting session | name: [cyan]{self.name}[/cyan]  profile: [cyan]{profile_name}[/cyan][/dim]")
         print()
         message = self.process_first_message()
+
+        if self.context_db:
+            repo = Session.get_short_git_remote_gitpython()
+
+            # load global and repo hints
+            init_tags = ["global", f"repos:{repo}"]
+            hints = get_hints(self.context_db, query=None, tags=init_tags, lazy_load=False, limit=5)
+            self.exchange.moderator.hints += "## DEVELOPER HINTS:\n\n" + "\n\n".join(
+                [f"### {h['file_name']} Hint File:\n{h['content']}" for h in hints]
+            )
+
+            devhint_tags = get_all_tags(self.context_db)
+            devhint_tags = [tag for tag in devhint_tags if tag not in init_tags]  # Updated line
+
+            self.exchange.moderator.hints += f"Available tags to search developer hints by are: {devhint_tags}\n\n"
+
         while message:  # Loop until no input (empty string).
             self.notifier.start()
             try:
@@ -226,6 +271,8 @@ class Session:
                 for tool_use in response.tool_use:
                     tool_result = self.exchange.call_function(tool_use)
                     content.append(tool_result)
+                    if tool_use.name == "get_hints":  # TODO find more elegant solution to inject hints into moderator
+                        self.exchange.moderator.dynamic_hints.add(json.loads(tool_result.output))
                 message = Message(role="user", content=content)
                 committed.append(message)
                 self.exchange.add(message)

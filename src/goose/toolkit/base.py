@@ -46,10 +46,11 @@ class Toolkit(ABC):
     empty if they are not required for the toolkit.
     """
 
-    def __init__(self, notifier: Notifier, requires: Optional[Requirements] = None) -> None:
+    def __init__(self, notifier: Notifier, context: str = None, requires: Optional[Requirements] = None) -> None:
         self.notifier = notifier
         # This needs to be updated after the fact via build_exchange
         self.exchange_view = None
+        self.context = context
 
     def system(self) -> str:
         """Get the addition to the system prompt for this toolkit."""

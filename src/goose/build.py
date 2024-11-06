@@ -43,7 +43,7 @@ def build_exchange(profile: Profile, notifier: Notifier) -> Exchange:
             spec.name,
             {key: concrete_toolkits[val] for key, val in spec.requires.items()},
         )
-        toolkit = get_toolkit(spec.name)(notifier=notifier, requires=requires)
+        toolkit = get_toolkit(spec.name)(notifier=notifier, requires=requires, context=profile.context)
         toolkits.append(toolkit)
 
     # From the toolkits, we derive the exchange prompt and tools

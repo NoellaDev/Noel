@@ -21,6 +21,7 @@ class Profile:
     processor: str
     accelerator: str
     moderator: str
+    context: str = None
     toolkits: list[ToolkitSpec] = field(factory=list, converter=ensure_list(ToolkitSpec))
 
     @toolkits.validator
@@ -41,7 +42,10 @@ class Profile:
 
     def profile_info(self) -> str:
         tookit_names = [toolkit.name for toolkit in self.toolkits]
-        return f"provider:{self.provider}, processor:{self.processor} toolkits: {', '.join(tookit_names)}"
+        return (
+            f"provider:{self.provider}, processor:{self.processor} "
+            f"toolkits: {', '.join(tookit_names)} context: {self.context}"
+        )
 
 
 def default_profile(provider: str, processor: str, accelerator: str, **kwargs: dict[str, any]) -> Profile:
@@ -55,4 +59,5 @@ def default_profile(provider: str, processor: str, accelerator: str, **kwargs: d
         accelerator=accelerator,
         moderator="synopsis",
         toolkits=[ToolkitSpec("synopsis")],
+        context=None
     )

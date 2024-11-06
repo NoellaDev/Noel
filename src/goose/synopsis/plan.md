@@ -27,6 +27,13 @@ Your plan needs to use the following format, but can have any number of tasks.
 
 {{synopsis.hints}}
 
+# Dynamic Contextual Hints
+
+{% for hint in synopsis.dynamic_hints %}
+{{ hint }}
+
+{% endfor %}
+
 # Context
 
 The current state of the agent is:

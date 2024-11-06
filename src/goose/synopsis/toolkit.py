@@ -11,12 +11,18 @@ from goose.synopsis.text_editor import TextEditor, TextEditorCommand
 from goose.synopsis.process_manager import ProcessManager, ProcessManagerCommand
 from goose.toolkit.base import Toolkit, tool
 
+from context_manager.developer_hints import get_hints
+from context_manager.context_db import LanceDBContext
+
 
 class SynopsisDeveloper(Toolkit):
     """Provides shell and file operation tools using OperatingSystem."""
 
     def __init__(self, *args: object, **kwargs: Dict[str, object]) -> None:
         super().__init__(*args, **kwargs)
+        self._file_history = defaultdict(list)
+        if self.context:
+            self.db = LanceDBContext(self.context)
         self._file_history = defaultdict(list)
 
     def system(self) -> str:
@@ -182,3 +188,23 @@ class SynopsisDeveloper(Toolkit):
             self.notifier.log(f"Failed fetching with HTTP error: {exc.response.status_code}")
         except Exception as exc:
             self.notifier.log(f"Failed fetching with error: {str(exc)}")
+
+    @tool
+    def get_hints(self, query: str, tags: list[str], limit: int) -> str:
+        """Get developer hints that might help with completing the coding task. Fetch relevant hints at the beginning
+           of any plan execution.
+
+        Args:
+            query (str): A query for relevant developer hints, e.g., "update proto files" or "generate unit tests"
+            tags (list[str]): A list of metadata tags relevant to the search eg., ["java", "proto update", "unit tests"]
+            limit (int): Number of relevant documents to return.
+        """
+        # TODO do some additional filtering / reranking on returned results based on the task
+        # TODO make toolkit available only if context is passed in profiles config
+        hints = get_hints(db=self.db, query=query, tags=tags, lazy_load=True, limit=limit)
+        if len(hints) == 0:
+            return ""
+        else:
+            return "## DEVELOPER HINTS:\n\n" + "\n\n".join(
+                [f"### {h['file_name']} Hint File:\n{h['content']}" for h in hints]
+            )

@@ -7,7 +7,7 @@ class ContextSummarizer(ContextTruncate):
     def rewrite(self, exchange: type["exchange.exchange.Exchange"]) -> None:  # noqa: F821
         """Summarize the context history up to the last few messages in the exchange"""
 
-        self._update_system_prompt_token_count(exchange)
+        # self._update_system_prompt_token_count(exchange)
 
         # TODO: use an offset for summarization
         if exchange.checkpoint_data.total_token_count < self.max_tokens:

@@ -6,6 +6,13 @@
 
 {{synopsis.hints}}
 
+# Dynamic Contextual Hints
+
+{% for hint in synopsis.dynamic_hints %}
+{{ hint }}
+
+{% endfor %}
+
 # Relevant Files
 
 {% for file in system.active_files %}
