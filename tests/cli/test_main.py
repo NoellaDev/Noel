@@ -35,7 +35,7 @@ def test_session_start_command_with_session_name(mock_session):
     runner = CliRunner()
     runner.invoke(goose_cli, ["session", "start", "session1", "--profile", "default"])
     mock_session_class.assert_called_once_with(
-        name="session1", profile="default", plan=None, log_level="INFO", tracing=False
+        name="session1", profile="default", plan=None, log_level="INFO", tracing=False, max_cost=None
     )
     mock_session_instance.run.assert_called_once()
 
@@ -43,8 +43,8 @@ def test_session_start_command_with_session_name(mock_session):
 def test_session_resume_command_with_session_name(mock_session):
     mock_session_class, mock_session_instance = mock_session
     runner = CliRunner()
-    runner.invoke(goose_cli, ["session", "resume", "session1", "--profile", "default"])
-    mock_session_class.assert_called_once_with(name="session1", profile="default", log_level="INFO")
+    runner.invoke(goose_cli, ["session", "resume", "session1", "--profile", "default", "--max-cost", "100"])
+    mock_session_class.assert_called_once_with(name="session1", profile="default", log_level="INFO", max_cost=100)
     mock_session_instance.run.assert_called_once()
 
 
@@ -69,7 +69,7 @@ def test_session_resume_command_without_session_name_use_latest_session(
 
     second_file_path = mock_session_files_path / "second.jsonl"
     mock_print.assert_called_once_with(f"Resuming most recent session: second from {second_file_path}")
-    mock_session_class.assert_called_once_with(name="second", profile="default", log_level="INFO")
+    mock_session_class.assert_called_once_with(name="second", profile="default", log_level="INFO", max_cost=None)
     mock_session_instance.run.assert_called_once()
 
 
@@ -131,7 +131,7 @@ def test_combined_group_commands(mock_session):
     mock_session_class, mock_session_instance = mock_session
     runner = CliRunner()
     runner.invoke(cli, ["session", "resume", "session1", "--profile", "default"])
-    mock_session_class.assert_called_once_with(name="session1", profile="default", log_level="INFO")
+    mock_session_class.assert_called_once_with(name="session1", profile="default", log_level="INFO", max_cost=None)
     mock_session_instance.run.assert_called_once()
 
 

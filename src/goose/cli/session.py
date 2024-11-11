@@ -20,7 +20,7 @@ from goose.cli.prompt.overwrite_session_prompt import OverwriteSessionPrompt
 from goose.cli.session_notifier import SessionNotifier
 from goose.profile import Profile
 from goose.utils import droid, load_plugins
-from goose.utils._cost_calculator import get_total_cost_message
+from goose.utils._cost_calculator import calculate_cost, get_total_cost_message
 from goose.utils._create_exchange import create_exchange
 from goose.utils.session_file import is_empty_session, is_existing_session, log_messages, read_or_create_file
 
@@ -67,6 +67,7 @@ class Session:
         plan: Optional[dict] = None,
         log_level: Optional[str] = "INFO",
         tracing: bool = False,
+        max_cost: Optional[int] = None,
         **kwargs: dict[str, any],
     ) -> None:
         if name is None:
@@ -92,6 +93,8 @@ class Session:
                 )
         if self.tracing:
             langfuse_context.configure(enabled=tracing)
+
+        self.max_cost = max_cost
 
         self.exchange = create_exchange(profile=load_profile(profile), notifier=self.notifier)
         setup_logging(log_file_directory=LOG_PATH, log_level=log_level)
@@ -221,6 +224,8 @@ class Session:
         committed = [self.exchange.messages[-1]]
 
         try:
+            self._check_cost_not_exceeded()
+
             self.status_indicator.update("processing request")
             response = self.exchange.generate()
             self.status_indicator.update("got response, processing")
@@ -237,6 +242,9 @@ class Session:
                 message = Message(role="user", content=content)
                 committed.append(message)
                 self.exchange.add(message)
+
+                self._check_cost_not_exceeded()
+
                 self.status_indicator.update("processing tool results")
                 response = self.exchange.generate()
                 committed.append(response)
@@ -247,6 +255,11 @@ class Session:
             # The interrupt reply modifies the message history,
             # and we sync those changes to committed
             self.interrupt_reply(committed)
+        except CostExceededError:
+            print(
+                f"[red]The session cost has exceeded the maximum allowed cost of ${self.max_cost/100:.2f}.\n"
+                + "To continue, exit and resume the session with a different maximum allowed cost.[/]"
+            )
 
         # we log the committed messages only once the reply completes
         # this prevents messages related to uncaught errors from being recorded
@@ -293,6 +306,24 @@ class Session:
 
     def load_session(self) -> list[Message]:
         return read_or_create_file(self.session_file_path)
+
+    def _check_cost_not_exceeded(self) -> None:
+        if self.max_cost is not None:
+            total_cost = 0
+            for model, token_usage in self.exchange.get_token_usage().items():
+                cost = calculate_cost(model, token_usage)
+                if cost is not None:
+                    total_cost += cost
+                else:
+                    raise RuntimeError(
+                        f"Pricing for model {model} not available. Incompatible with --max-cost parameter."
+                    )
+
+            # Convert to integer cents for comparison
+            cost_cents = int(round(total_cost * 100, 0))
+            if cost_cents >= self.max_cost:
+                error = f"Session cost ${total_cost:.2f} exceeds maximum allowed cost ${self.max_cost/100:.2f}"
+                raise CostExceededError(error)
 
     def _log_cost(self, start_time: datetime, end_time: datetime) -> None:
         get_logger().info(get_total_cost_message(self.exchange.get_token_usage(), self.name, start_time, end_time))
@@ -344,6 +375,12 @@ class Session:
         except Exception as e:
             logger.error(f"error deleting empty session file: {e}")
         return False
+
+
+class CostExceededError(Exception):
+    """Raised when the cost of a session exceeds the maximum allowed cost."""
+
+    pass
 
 
 if __name__ == "__main__":

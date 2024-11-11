@@ -35,7 +35,7 @@ PRICES = {
 }
 
 
-def _calculate_cost(model: str, token_usage: Usage) -> Optional[float]:
+def calculate_cost(model: str, token_usage: Usage) -> Optional[float]:
     model_name = model.lower()
     if model_name in PRICES:
         input_token_price, output_token_price = PRICES[model_name]
@@ -50,7 +50,7 @@ def get_total_cost_message(
     message = ""
     session_name_prefix = f"Session name: {session_name}"
     for model, token_usage in token_usages.items():
-        cost = _calculate_cost(model, token_usage)
+        cost = calculate_cost(model, token_usage)
         if cost is not None:
             message += f"{session_name_prefix} | Cost for model {model} {str(token_usage)}: ${cost:.2f}\n"
             total_cost += cost

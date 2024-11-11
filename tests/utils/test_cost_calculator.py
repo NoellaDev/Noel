@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from exchange.providers.base import Usage
-from goose.utils._cost_calculator import _calculate_cost, get_total_cost_message
+from goose.utils._cost_calculator import calculate_cost, get_total_cost_message
 
 SESSION_NAME = "test_session"
 START_TIME = datetime(2024, 10, 20, 1, 2, 3, tzinfo=timezone.utc)
@@ -32,7 +32,7 @@ def mock_prices():
 
 
 def test_calculate_cost(mock_prices):
-    cost = _calculate_cost("gpt-4o", Usage(input_tokens=10000, output_tokens=600, total_tokens=10600))
+    cost = calculate_cost("gpt-4o", Usage(input_tokens=10000, output_tokens=600, total_tokens=10600))
     assert cost == 0.059
 
 

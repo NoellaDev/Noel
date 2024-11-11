@@ -160,8 +160,14 @@ def get_session_files() -> dict[str, Path]:
 @click.option("--plan", type=click.Path(exists=True))
 @click.option("--log-level", type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]), default="INFO")
 @click.option("--tracing", is_flag=True, required=False)
+@click.option("--max-cost", type=int, help="Maximum cost in cents (e.g., 100 = $1.00)", default=None)
 def session_start(
-    name: Optional[str], profile: str, log_level: str, plan: Optional[str] = None, tracing: bool = False
+    name: Optional[str],
+    profile: str,
+    log_level: str,
+    plan: Optional[str] = None,
+    tracing: bool = False,
+    max_cost: Optional[int] = None,
 ) -> None:
     """Start a new goose session"""
     if plan:
@@ -172,7 +178,9 @@ def session_start(
         _plan = None
 
     try:
-        session = Session(name=name, profile=profile, plan=_plan, log_level=log_level, tracing=tracing)
+        session = Session(
+            name=name, profile=profile, plan=_plan, log_level=log_level, tracing=tracing, max_cost=max_cost
+        )
         session.run()
     except RuntimeError as e:
         print(f"[red]Error: {e}")
@@ -204,7 +212,8 @@ def session_planned(plan: str, log_level: str, args: Optional[dict[str, str]]) -
 @click.argument("name", required=False, shell_complete=autocomplete_session_files)
 @click.option("--profile")
 @click.option("--log-level", type=LOG_CHOICE, default="INFO")
-def session_resume(name: Optional[str], profile: str, log_level: str) -> None:
+@click.option("--max-cost", type=int, help="Maximum cost in cents (e.g., 100 = $1.00)", default=None)
+def session_resume(name: Optional[str], profile: str, log_level: str, max_cost: Optional[int] = None) -> None:
     """Resume an existing goose session"""
     session_files = get_session_files()
     if name is None:
@@ -219,7 +228,7 @@ def session_resume(name: Optional[str], profile: str, log_level: str) -> None:
             print(f"Resuming session: {name}")
         else:
             print(f"Creating new session: {name}")
-    session = Session(name=name, profile=profile, log_level=log_level)
+    session = Session(name=name, profile=profile, log_level=log_level, max_cost=max_cost)
     session.run(new_session=False)
 
 
@@ -229,12 +238,14 @@ def session_resume(name: Optional[str], profile: str, log_level: str) -> None:
 @click.option("--log-level", type=LOG_CHOICE, default="INFO")
 @click.option("--resume-session", is_flag=True, help="Resume the last session if available")
 @click.option("--tracing", is_flag=True, required=False)
+@click.option("--max-cost", type=int, help="Maximum cost in cents (e.g., 100 = $1.00)", default=None)
 def run(
     message_file: Optional[str],
     profile: str,
     log_level: str,
     resume_session: bool = False,
     tracing: bool = False,
+    max_cost: Optional[int] = None,
 ) -> None:
     """Run a single-pass session with a message from a markdown input file"""
     if message_file:
@@ -247,9 +258,9 @@ def run(
         session_files = get_session_files()
         if session_files:
             name = list(session_files.keys())[0]
-            session = Session(name=name, profile=profile, log_level=log_level, tracing=tracing)
+            session = Session(name=name, profile=profile, log_level=log_level, tracing=tracing, max_cost=max_cost)
     else:
-        session = Session(profile=profile, log_level=log_level, tracing=tracing)
+        session = Session(profile=profile, log_level=log_level, tracing=tracing, max_cost=max_cost)
     session.single_pass(initial_message=initial_message)
 
 
