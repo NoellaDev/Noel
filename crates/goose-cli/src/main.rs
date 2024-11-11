@@ -151,10 +151,12 @@ fn create_openai_provider(cli: &Cli) -> Result<ProviderType> {
         .or_else(|| env::var("OPENAI_API_KEY").ok())
         .context("API key must be provided via --api-key or OPENAI_API_KEY environment variable")?;
 
-    Ok(ProviderType::OpenAi(OpenAiProvider::new(OpenAiProviderConfig {
-        api_key,
-        host: "https://api.openai.com".to_string(),
-    })?))
+    Ok(ProviderType::OpenAi(OpenAiProvider::new(
+        OpenAiProviderConfig {
+            api_key,
+            host: "https://api.openai.com".to_string(),
+        },
+    )?))
 }
 
 fn create_databricks_provider(cli: &Cli) -> Result<ProviderType> {
@@ -164,16 +166,19 @@ fn create_databricks_provider(cli: &Cli) -> Result<ProviderType> {
         .or_else(|| env::var("DATABRICKS_HOST").ok())
         .unwrap_or("https://block-lakehouse-production.cloud.databricks.com".to_string());
 
+    // databricks_token is optional. if not provided, we will use OAuth
     let databricks_token = cli
         .databricks_token
         .clone()
-        .or_else(|| env::var("DATABRICKS_TOKEN").ok())
-        .context("Databricks token must be provided via --databricks-token or DATABRICKS_TOKEN environment variable")?;
+        .or_else(|| env::var("DATABRICKS_TOKEN").ok());
 
-    Ok(ProviderType::Databricks(DatabricksProvider::new(DatabricksProviderConfig {
-        host: databricks_host,
-        token: databricks_token,
-    })?))
+    Ok(ProviderType::Databricks(DatabricksProvider::new(
+        DatabricksProviderConfig {
+            host: databricks_host,
+            token: databricks_token,
+            use_oauth: true,
+        },
+    )?))
 }
 
 impl Provider for ProviderType {
@@ -188,11 +193,15 @@ impl Provider for ProviderType {
     ) -> Result<(Message, Usage)> {
         match self {
             ProviderType::OpenAi(provider) => {
-                provider.complete(model, system, messages, tools, temperature, max_tokens).await
-            },
+                provider
+                    .complete(model, system, messages, tools, temperature, max_tokens)
+                    .await
+            }
             ProviderType::Databricks(provider) => {
-                provider.complete(model, system, messages, tools, temperature, max_tokens).await
-            },
+                provider
+                    .complete(model, system, messages, tools, temperature, max_tokens)
+                    .await
+            }
         }
     }
 
