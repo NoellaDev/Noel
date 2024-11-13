@@ -1,129 +1,107 @@
-use std::collections::HashMap;
 use anyhow::Result;
-use bat::PrettyPrinter;
-use clap::Parser;
-use cliclack::{input, spinner};
-use console::style;
-use futures::StreamExt;
-use goose::providers::factory::ProviderType;
+use clap::{Parser, Subcommand};
 
-use goose::agent::Agent;
-use goose::developer::DeveloperSystem;
-use goose::providers::configs::OpenAiProviderConfig;
-use goose::providers::configs::{DatabricksProviderConfig, ProviderConfig};
-use goose::providers::types::message::Message;
-use goose::providers::factory;
+mod commands;
+mod config;
+mod repl;
+mod session;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
+#[command(propagate_version = true)]
 struct Cli {
-    /// Provider option (openai or databricks)
-    #[arg(short, long, default_value = "open-ai")]
-    #[arg(value_enum)]
-    provider: CliProviderVariant,
-
-    /// OpenAI API Key (can also be set via OPENAI_API_KEY environment variable)
-    #[arg(long)]
-    api_key: Option<String>,
-
-    /// Databricks host (can also be set via DATABRICKS_HOST environment variable)
-    #[arg(long)]
-    databricks_host: Option<String>,
-
-    /// Databricks token (can also be set via DATABRICKS_TOKEN environment variable)
-    #[arg(long)]
-    databricks_token: Option<String>,
-
-    /// Model to use
-    #[arg(short, long, default_value = "gpt-4o")]
-    model: String,
+    #[command(subcommand)]
+    command: Commands,
 }
 
-#[derive(clap::ValueEnum, Clone, Debug)]
-enum CliProviderVariant {
-    OpenAi,
-    Databricks,
+#[derive(Subcommand)]
+enum Commands {
+    /// Configure goose provider settings
+    Configure {
+        /// Provider name (e.g., openai, databricks)
+        #[arg(long)]
+        provider: Option<String>,
+        
+        /// Provider host URL
+        #[arg(long)]
+        host: Option<String>,
+        
+        /// Authentication token
+        #[arg(long)]
+        token: Option<String>,
+        
+        /// Model processor type
+        #[arg(long)]
+        processor: Option<String>,
+        
+        /// Model accelerator type
+        #[arg(long)]
+        accelerator: Option<String>,
+    },
+    
+    /// Start or resume a session
+    Session {
+        /// Session ID to resume
+        id: Option<String>,
+        
+        /// Resume the most recent session
+        #[arg(long)]
+        resume: bool,
+        
+        /// Run in headless mode (no REPL)
+        #[arg(long)]
+        headless: bool,
+        
+        /// Initial plan message
+        #[arg(long)]
+        plan: Option<String>,
+        
+        /// Initial plan from file
+        #[arg(long)]
+        plan_file: Option<String>,
+    },
+    
+    /// Run in headless mode (alias for session --headless)
+    Run {
+        /// Initial plan message
+        #[arg(long)]
+        plan: Option<String>,
+        
+        /// Initial plan from file
+        #[arg(long)]
+        plan_file: Option<String>,
+    },
+    
+    /// Show version information
+    Version,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let provider_type = match cli.provider {
-        CliProviderVariant::OpenAi => ProviderType::OpenAi,
-        CliProviderVariant::Databricks => ProviderType::Databricks,
-    };
-
-    println!(
-        "Example goose CLI {}",
-        style("- type \"exit\" to end the session").dim()
-    );
-    println!("\n");
-
-    let system = Box::new(DeveloperSystem::new());
-    let provider = factory::get_provider(provider_type, create_provider_config(&cli)).unwrap();
-    let mut agent = Agent::new(provider, cli.model.clone());
-    agent.add_system(system);
-    println!("Connected the developer system");
-
-    let mut messages = Vec::new();
-
-    loop {
-        let message_text: String = input("Message:").placeholder("").multiline().interact()?;
-        if message_text.trim().eq_ignore_ascii_case("exit") {
-            break;
+    match cli.command {
+        Commands::Configure {
+            provider,
+            host,
+            token,
+            processor,
+            accelerator,
+        } => {
+            commands::configure::execute(provider, host, token, processor, accelerator).await
         }
-        messages.push(Message::user(&message_text).unwrap());
-
-        let spin = spinner();
-        spin.start("awaiting reply");
-
-        // Process the stream of messages
-        let mut stream = agent.reply(&messages);
-        while let Some(response) = stream.next().await {
-            match response {
-                Ok(message) => {
-                    messages.push(message.clone());
-                    for content in &message.content {
-                        render(&content.summary()).await;
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Error: {}", e);
-                    break;
-                }
-            }
+        Commands::Session {
+            id,
+            resume,
+            headless,
+            plan,
+            plan_file,
+        } => {
+            commands::session::execute(id, resume, headless, plan, plan_file).await
         }
-        spin.stop("");
-
-        println!("\n");
-    }
-    Ok(())
-}
-
-async fn render(content: &str) {
-    PrettyPrinter::new()
-        .input_from_bytes(content.as_bytes())
-        .language("markdown")
-        .print()
-        .unwrap();
-}
-
-fn create_provider_config(cli: &Cli) -> ProviderConfig {
-    match cli.provider {
-        CliProviderVariant::OpenAi => ProviderConfig::OpenAi(OpenAiProviderConfig {
-            host: "https://api.openai.com".to_string(),
-            api_key: cli.api_key.clone().unwrap_or_else(|| {
-                std::env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY must be set")
-            }),
-        }),
-        CliProviderVariant::Databricks => ProviderConfig::Databricks(DatabricksProviderConfig {
-            host: cli.databricks_host.clone().unwrap_or_else(|| {
-                std::env::var("DATABRICKS_HOST").expect("DATABRICKS_HOST must be set")
-            }),
-            token: cli.databricks_token.clone().unwrap_or_else(|| {
-                std::env::var("DATABRICKS_TOKEN").expect("DATABRICKS_TOKEN must be set")
-            }),
-        }),
+        Commands::Run { plan, plan_file } => {
+            commands::run::execute(plan, plan_file).await
+        }
+        Commands::Version => commands::version::execute().await,
     }
 }
