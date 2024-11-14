@@ -21,10 +21,15 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{convert::Infallible, pin::Pin, task::{Context, Poll}};
 use tokio::sync::mpsc;
+use tokio::net::UnixListener;
 use tokio_stream::wrappers::ReceiverStream;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 use bytes::Bytes;
+use hyper::server::conn::http1;
+use hyper_util::rt::TokioIo;
+use hyper::service::service_fn;
+use tower::Service;
 
 // Request type matching the Python implementation
 #[derive(Debug, Deserialize)]
@@ -114,10 +119,53 @@ async fn main() -> anyhow::Result<()> {
         .layer(cors)
         .with_state(state);
 
-    // Run server
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;
-    info!("listening on {}", listener.local_addr()?);
-    axum::serve(listener, app).await?;
+    // Create Unix socket listener
+    let socket_path = "/tmp/goose.sock";
+    // Remove the socket file if it already exists
+    if std::path::Path::new(socket_path).exists() {
+        std::fs::remove_file(socket_path)?;
+    }
+    let unix_listener = UnixListener::bind(socket_path)?;
+    info!("listening on Unix socket at {}", socket_path);
+
+    // Create TCP listener
+    let tcp_listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await?;
+    info!("listening on {}", tcp_listener.local_addr()?);
+
+    // Clone the app for both listeners
+    let app_clone = app.clone();
+
+    // Spawn the Unix socket listener
+    tokio::spawn(async move {
+        loop {
+            match unix_listener.accept().await {
+                Ok((stream, _)) => {
+                    let app = app_clone.clone();
+                    let app = app_clone.clone();
+                    tokio::spawn(async move {
+                        let io = TokioIo::new(stream);
+                        let service = service_fn(move |req| {
+                            let mut app = app.clone();
+                            async move { app.call(req).await }
+                        });
+                        
+                        if let Err(err) = http1::Builder::new()
+                            .serve_connection(io, service)
+                            .await
+                        {
+                            eprintln!("Error serving Unix socket connection: {}", err);
+                        }
+                    });
+                }
+                Err(err) => {
+                    eprintln!("Error accepting Unix socket connection: {}", err);
+                }
+            }
+        }
+    });
+
+    // Run the TCP listener
+    axum::serve(tcp_listener, app).await?;
     Ok(())
 }
 
