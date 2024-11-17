@@ -557,15 +557,29 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_bash_change_directory() {
+    async fn test_bash_change_directory_no_effect() {
         let system = get_system().await;
 
         let tool_call = ToolCall::new("bash", json!({ "working_dir": ".", "command": "pwd" }));
         let result = system.call(tool_call).await.unwrap();
-        assert!(result["result"]
-            .as_str()
-            .unwrap()
-            .contains("Changed directory to"));
+        // since working_dir is ., we DON'T expect the result to contain "Changed directory"
+        assert!(!result.as_str().unwrap().contains("Changed directory to"));
+    }
+
+    #[tokio::test]
+    async fn test_bash_change_directory_success() {
+        let system = get_system().await;
+        let temp_dir = tempfile::Builder::new()
+            .prefix("test_temp_")
+            .tempdir_in(".")
+            .unwrap();
+
+        let tool_call = ToolCall::new(
+            "bash",
+            json!({ "working_dir": temp_dir.path().display().to_string(), "command": "pwd" }),
+        );
+        let result = system.call(tool_call).await.unwrap();
+        assert!(result.as_str().unwrap().contains("Changed directory to"));
     }
 
     #[tokio::test]
