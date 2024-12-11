@@ -7,6 +7,8 @@ interface IElectronAPI {
     apiCredsMissing: boolean;
     secretKey: string;
   };
+  getSession: (sessionId: string) => object;
+  saveSession: (session: { name: string; messages: Array<object>; directory: string }) => string;
 }
 
 declare global {
