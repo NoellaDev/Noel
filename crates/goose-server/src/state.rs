@@ -5,7 +5,7 @@ use goose::{
     developer::DeveloperSystem,
     memory::MemorySystem,
     providers::{configs::ProviderConfig, factory},
-    systems::goose_hints::GooseHintsSystem,
+    systems::{self, goose_hints::GooseHintsSystem},
 };
 use std::{env, sync::Arc};
 use tokio::sync::Mutex;
@@ -32,6 +32,8 @@ impl AppState {
 
         let goosehints_system = Box::new(GooseHintsSystem::new());
         agent.add_system(goosehints_system);
+        let browser = systems::web_browser::WebBrowserSystem::new();
+        agent.add_system(Box::new(browser));
 
         Ok(Self {
             provider_config,
