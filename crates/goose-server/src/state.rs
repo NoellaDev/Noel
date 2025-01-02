@@ -1,5 +1,6 @@
 use anyhow::Result;
 use goose::providers::configs::GroqProviderConfig;
+//use goose::trust_risk::TrustLevel;
 use goose::{
     agent::Agent,
     developer::DeveloperSystem,
@@ -23,6 +24,7 @@ impl AppState {
         let mut agent = Agent::new(provider);
 
         dbg!("Adding DeveloperSystem");
+        //developer_system.set_trust_level(TrustLevel::NoDestructive);
         agent.add_system(Box::new(DeveloperSystem::new()));
 
         // Add NonDeveloperSystem only if GOOSE_SERVER__NON_DEVELOPER is set to "true"

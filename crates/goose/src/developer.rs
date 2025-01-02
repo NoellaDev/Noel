@@ -16,6 +16,7 @@ use xcap::{Monitor, Window};
 
 use crate::errors::{AgentError, AgentResult};
 use crate::systems::System;
+use crate::trust_risk::{TrustLevel, TrustManager};
 use mcp_core::{Content, Resource, Role, Tool, ToolCall};
 
 pub struct DeveloperSystem {
@@ -24,6 +25,7 @@ pub struct DeveloperSystem {
     active_resources: Mutex<HashMap<String, Resource>>, // Use URI string as key instead of PathBuf
     file_history: Mutex<HashMap<PathBuf, Vec<String>>>,
     instructions: String,
+    trust_manager: TrustManager,
 }
 
 impl Default for DeveloperSystem {
@@ -33,6 +35,16 @@ impl Default for DeveloperSystem {
 }
 
 impl DeveloperSystem {
+    /// Changes the trust level for operations
+    pub fn set_trust_level(&self, level: TrustLevel) {
+        self.trust_manager.set_level(level);
+    }
+
+    /// Gets the current trust level
+    pub fn get_trust_level(&self) -> TrustLevel {
+        self.trust_manager.get_level()
+    }
+
     // Reads a resource from a URI and returns its content.
     // The resource must already exist in active_resources.
     pub async fn read_resource(&self, uri: &str) -> AgentResult<String> {
@@ -121,6 +133,7 @@ impl DeveloperSystem {
     }
 
     pub fn new() -> Self {
+        let trust_manager = TrustManager::new();
         let list_windows_tool = Tool::new(
             "list_windows",
             indoc! {r#"
@@ -279,6 +292,7 @@ impl DeveloperSystem {
             },
             file_history: Mutex::new(HashMap::new()),
             instructions,
+            trust_manager,
         }
     }
 
@@ -305,6 +319,15 @@ impl DeveloperSystem {
                 .ok_or(AgentError::InvalidParameters(
                     "The command string is required".into(),
                 ))?;
+
+        // Only block destructive operations at level 0
+        if self.trust_manager.is_destructive_command(command)
+            && self.trust_manager.get_level() == TrustLevel::NoDestructive
+        {
+            return Err(AgentError::ExecutionError(
+                "Do not run any destructive or editing commands. Can run commands but not if they make file changes or system changes.".into()
+            ));
+        }
 
         // Disallow commands that should use other tools
         if command.trim_start().starts_with("cat") {
@@ -369,6 +392,15 @@ impl DeveloperSystem {
             .get("path")
             .and_then(|v| v.as_str())
             .ok_or_else(|| AgentError::InvalidParameters("Missing 'path' parameter".into()))?;
+
+        // Only block destructive operations at level 0
+        if (command == "write" || command == "str_replace")
+            && self.trust_manager.get_level() == TrustLevel::NoDestructive
+        {
+            return Err(AgentError::ExecutionError(
+                "File modifications are not allowed at NoDestructive trust level (0)".into(),
+            ));
+        }
 
         let path = self.resolve_path(path_str)?;
 
@@ -903,6 +935,8 @@ mod tests {
     #[tokio::test]
     async fn test_text_editor_write_and_view_file() {
         let system = get_system().await;
+        // Set trust level to AllowAll for this test
+        system.set_trust_level(TrustLevel::AllowAll);
 
         let temp_dir = tempfile::tempdir().unwrap();
         let file_path = temp_dir.path().join("test.txt");
