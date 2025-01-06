@@ -2,29 +2,22 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 
-// https://vitejs.dev/config
+// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
   build: {
-    target: 'esnext',
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'src/main.ts'),
-        index: resolve(__dirname, 'index.html'),
+        renderer: resolve(__dirname, 'src/renderer.tsx'),
       },
     },
   },
+  optimizeDeps: {
+    exclude: ['@huggingface/transformers'],
+  },
   worker: {
     format: 'es',
-    plugins: () => [react()],
-    rollupOptions: {
-      output: {
-        format: 'es',
-        chunkFileNames: '[name]-[hash].js',
-      }
-    }
+    plugins: [react()],
   },
-  optimizeDeps: {
-    exclude: ['@huggingface/transformers']
-  }
 });

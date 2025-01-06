@@ -19,6 +19,7 @@ module.exports = [
       },
       globals: {
         // Electron/Node.js globals
+        self: 'readonly',
         process: 'readonly',
         __dirname: 'readonly',
         require: 'readonly',
@@ -53,6 +54,11 @@ module.exports = [
         React: 'readonly',
         handleAction: 'readonly',
         requestAnimationFrame: 'readonly',
+        AudioContext: 'readonly',
+        AudioWorkletNode: 'readonly',
+        Worker: 'readonly',
+        MediaStream: 'readonly',
+        MediaStreamAudioSourceNode: 'readonly',
       },
     },
     plugins: {

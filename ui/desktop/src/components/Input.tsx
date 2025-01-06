@@ -1,8 +1,11 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Button } from './ui/button';
 import Send from './ui/Send';
 import Stop from './ui/Stop';
 import { Paperclip } from 'lucide-react';
+import { AudioButton, AudioWaveform } from './ClientSpeechRecorder';
+declare class Blob{}
+declare class FormData{}
 
 interface InputProps {
   handleSubmit: (e: React.FormEvent) => void;
@@ -26,7 +29,9 @@ export default function Input({
   onStop
 }: InputProps) {
   const [value, setValue] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
+  const waveformRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (textAreaRef.current && !disabled) {
@@ -80,62 +85,87 @@ export default function Input({
     }
   };
 
+  const handleTranscription = useCallback((text: string) => {
+    setValue(text);
+    textAreaRef.current?.focus();
+  }, []);
+
+  const handleToggleRecording = useCallback(() => {
+    setIsRecording(prev => !prev);
+  }, []);
+
   return (
-    <form onSubmit={onFormSubmit} className="flex relative h-auto px-[16px] pr-[68px] py-[1rem]">
-      <textarea
-        autoFocus
-        id="dynamic-textarea"
-        placeholder="What should goose do?"
-        value={value}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        disabled={disabled}
-        ref={textAreaRef}
-        rows={1}
-        style={{
-          minHeight: `${minHeight}px`,
-          maxHeight: `${maxHeight}px`,
-          overflowY: 'auto'
-        }}
-        className={`w-full outline-none border-none focus:ring-0 bg-transparent p-0 text-14 resize-none ${
-          disabled ? 'cursor-not-allowed opacity-50' : ''
-        }`}
-      />
-      <Button
-        type="button"
-        size="icon"
-        variant="ghost"
-        onClick={handleFileSelect}
-        disabled={disabled}
-        className={`absolute right-[40px] top-1/2 -translate-y-1/2 text-indigo-600 dark:text-indigo-300 hover:text-indigo-700 dark:hover:text-indigo-200 hover:bg-indigo-100 dark:hover:bg-indigo-800 ${
-          disabled ? 'opacity-50 cursor-not-allowed' : ''
-        }`}
-      >
-        <Paperclip size={20} />
-      </Button>
-      {isLoading ? (
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          onClick={onStop}
-          className="absolute right-2 top-1/2 -translate-y-1/2 bg-indigo-100 dark:bg-indigo-800 dark:text-indigo-200 text-indigo-600 hover:opacity-50"
-        >
-          <Stop size={24} />
-        </Button>
-      ) : (
-        <Button
-          type="submit"
-          size="icon"
-          variant="ghost"
-          disabled={disabled || !value.trim()}
-          className={`absolute right-2 top-1/2 -translate-y-1/2 text-indigo-600 dark:text-indigo-300 hover:text-indigo-700 dark:hover:text-indigo-200 hover:bg-indigo-100 dark:hover:bg-indigo-800 ${
-            disabled || !value.trim() ? 'opacity-50 cursor-not-allowed' : ''
-          }`}
-        >
-          <Send size={24} />
-        </Button>
-      )}
-    </form>
+      <form onSubmit={onFormSubmit}
+            className="flex relative h-auto px-[16px] pr-[122px] py-[1rem]">
+        <div className="relative flex-grow">
+          <textarea
+              autoFocus
+              id="dynamic-textarea"
+              placeholder={isRecording ? "Recording..." : "What should goose do?"}
+              value={value}
+              onChange={handleChange}
+              onKeyDown={handleKeyDown}
+              disabled={disabled || isRecording}
+              ref={textAreaRef}
+              rows={1}
+              style={{
+                minHeight: `${minHeight}px`,
+                maxHeight: `${maxHeight}px`,
+                overflowY: 'auto'
+              }}
+              className={`w-full outline-none border-none focus:ring-0 bg-transparent p-0 text-14 resize-none ${
+                  disabled ? 'cursor-not-allowed opacity-50' : ''
+              }
+            ${!isRecording ? 'opacity-100' : 'opacity-0'}`}
+          />
+          <AudioWaveform
+              ref={waveformRef}
+              isRecording={isRecording}
+              onTranscription={handleTranscription}
+              className="absolute left-0 right-0 bottom-0 z-5 overflow-hidden "
+          />
+        </div>
+        <div className="absolute right-[46px] top-1/2 -translate-y-1/2 flex items-center gap-2">
+          <AudioButton
+              isRecording={isRecording}
+              onClick={handleToggleRecording}
+          />
+          <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              onClick={handleFileSelect}
+              disabled={disabled}
+              className={`absolute right-[40px] top-1/2 -translate-y-1/2  text-indigo-600 dark:text-indigo-300 hover:text-indigo-700 dark:hover:text-indigo-200 hover:bg-indigo-100 dark:hover:bg-indigo-800 ${
+                  disabled ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+          >
+            <Paperclip size={20}/>
+          </Button>
+        </div>
+        {isLoading ? (
+            <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                onClick={onStop}
+                className="absolute right-2 top-1/2 -translate-y-1/2 bg-indigo-100 dark:bg-indigo-800 dark:text-indigo-200 text-indigo-600 hover:opacity-50"
+            >
+              <Stop size={24}/>
+            </Button>
+        ) : (
+            <Button
+                type="submit"
+                size="icon"
+                variant="ghost"
+                disabled={disabled || !value.trim()}
+                className={`absolute right-2 top-1/2 -translate-y-1/2 text-indigo-600 dark:text-indigo-300 hover:text-indigo-700 dark:hover:text-indigo-200 hover:bg-indigo-100 dark:hover:bg-indigo-800 ${
+                    disabled || !value.trim() ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+            >
+              <Send size={24}/>
+            </Button>
+        )}
+     </form>
   );
 }
