@@ -20,6 +20,9 @@ import FlappyGoose from './components/FlappyGoose';
 // update this when you want to show the welcome screen again - doesn't have to be an actual version, just anything woudln't have been seen before
 const CURRENT_VERSION = '0.0.0';
 
+// Maximum number of messages to keep in memory
+const MAX_MESSAGES = 200;
+
 // Get the last version from localStorage
 const getLastSeenVersion = () => localStorage.getItem('lastSeenVersion');
 const setLastSeenVersion = (version: string) => localStorage.setItem('lastSeenVersion', version);
@@ -116,8 +119,23 @@ function ChatContent({
     },
   });
 
-  // Update chat messages when they change
+  // Update chat messages when they change and trim if exceeding limit
   useEffect(() => {
+    if (messages.length > MAX_MESSAGES) {
+      // Keep the most recent messages
+      const trimmedMessages = messages.slice(-MAX_MESSAGES);
+      setMessages(trimmedMessages);
+      
+      // Also trim the metadata for old messages
+      const newMetadata: Record<string, string[]> = {};
+      trimmedMessages.forEach(msg => {
+        if (messageMetadata[msg.id]) {
+          newMetadata[msg.id] = messageMetadata[msg.id];
+        }
+      });
+      setMessageMetadata(newMetadata);
+    }
+
     const updatedChats = chats.map((c) =>
       c.id === selectedChatId ? { ...c, messages } : c
     );
