@@ -43,8 +43,9 @@ pub async fn handle_response(payload: Value, response: Response) -> Result<Resul
             Err(anyhow!("Server error: {}", status))
         }
         _ => Err(anyhow!(
-            "Request failed: {}\nPayload: {}",
+            "Request failed: {}\nError Text: {}\nPayload: {}",
             response.status(),
+            response.text().await?,
             payload
         )),
     })

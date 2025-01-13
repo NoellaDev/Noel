@@ -3,6 +3,7 @@ mod capabilities;
 mod default;
 mod factory;
 mod reference;
+mod summarizer;
 mod system;
 
 pub use agent::Agent;
