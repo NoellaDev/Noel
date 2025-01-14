@@ -2,16 +2,13 @@ use anyhow::Result;
 use axum::{extract::Query, response::Html, routing::get, Router};
 use base64::Engine;
 use chrono::{DateTime, Utc};
-use lazy_static::lazy_static;
+use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::Digest;
+use std::fs::OpenOptions;
 use std::{collections::HashMap, fs, net::SocketAddr, path::PathBuf, sync::Arc};
-use tokio::sync::{oneshot, Mutex as TokioMutex};
-
-lazy_static! {
-    static ref OAUTH_MUTEX: TokioMutex<()> = TokioMutex::new(());
-}
+use tokio::sync::oneshot;
 use url::Url;
 
 #[derive(Debug, Clone)]
@@ -28,6 +25,7 @@ struct TokenData {
 
 struct TokenCache {
     cache_path: PathBuf,
+    lock_path: PathBuf,
 }
 
 fn get_base_path() -> PathBuf {
@@ -46,8 +44,12 @@ impl TokenCache {
 
         fs::create_dir_all(get_base_path()).unwrap();
         let cache_path = get_base_path().join(format!("{}.json", hash));
+        let lock_path = get_base_path().join(format!("{}.lock", hash));
 
-        Self { cache_path }
+        Self {
+            cache_path,
+            lock_path,
+        }
     }
 
     fn load_token(&self) -> Option<TokenData> {
@@ -285,10 +287,38 @@ pub(crate) async fn get_oauth_token_async(
     redirect_url: &str,
     scopes: &[String],
 ) -> Result<String> {
-    // Acquire the global mutex to ensure only one OAuth flow runs at a time
-    let _guard = OAUTH_MUTEX.lock().await;
-
     let token_cache = TokenCache::new(host, client_id, scopes);
+
+    // Create or open the lock file
+    // It is okay if the file still exists, because the lock is not based on it existing but is an
+    // advisory lock https://man7.org/linux/man-pages/man2/flock.2.html
+    let lock_file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .open(&token_cache.lock_path)?;
+
+    // Try to acquire the lock with retries for up to 30 seconds
+    let start = std::time::Instant::now();
+    let timeout = std::time::Duration::from_secs(30);
+
+    loop {
+        match lock_file.try_lock_exclusive() {
+            Ok(_) => break,
+            Err(e) => {
+                if start.elapsed() > timeout {
+                    return Err(anyhow::anyhow!(
+                        "Could not acquire lock after {} seconds. If no other process is running, \
+                        the lock file at {:?} may need to be manually removed. Error: {}",
+                        timeout.as_secs(),
+                        token_cache.lock_path,
+                        e
+                    ));
+                }
+                // Wait a bit before retrying
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            }
+        }
+    }
 
     // Try cache first
     if let Some(token) = token_cache.load_token() {
@@ -309,6 +339,12 @@ pub(crate) async fn get_oauth_token_async(
 
     // Cache and return
     token_cache.save_token(&token)?;
+
+    // Release the lock
+    lock_file.unlock()?;
+    // this cleanup is aesthetic only, it does not impact the lock
+    let _ = std::fs::remove_file(&token_cache.lock_path);
+
     Ok(token.access_token)
 }
 
