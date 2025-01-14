@@ -24,13 +24,17 @@ pub struct ModelConfig {
     /// The name of the model to use
     pub model_name: String,
     /// Optional explicit context limit that overrides any defaults
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub context_limit: Option<usize>,
     /// Optional temperature setting (0.0 - 1.0)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f32>,
     /// Optional maximum tokens to generate
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<i32>,
     /// Factor used to estimate safe context window size (0.0 - 1.0)
     /// Defaults to 0.8 (80%) of the context limit to leave headroom for responses
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub estimate_factor: Option<f32>,
 }
 

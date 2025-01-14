@@ -54,7 +54,7 @@ export GOOSE_PROVIDER__MODEL=claude-3-sonnet-2`;
 
 const OPENROUTER_CONFIG = `export GOOSE_PROVIDER__TYPE=openrouter
 export GOOSE_PROVIDER__HOST=https://openrouter.ai
-export GOOSE_PROVIDER__MODEL=anthropic/claude-3-sonnet
+export GOOSE_PROVIDER__MODEL="anthropic/claude-3.5-sonnet"
 export GOOSE_PROVIDER__API_KEY=your_api_key_here`;
 
 export function ApiKeyWarning({ className }: ApiKeyWarningProps) {
