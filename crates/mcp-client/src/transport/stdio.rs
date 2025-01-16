@@ -139,10 +139,41 @@ impl StdioTransport {
         }
     }
 
+    async fn handle_npx(&self) -> Result<(String, &Vec<String>), Error> {
+        if let Ok(registry_url) = std::env::var("GOOSE_NPM_REGISTRY") {
+            // Check if registry is reachable using reqwest
+            let client = reqwest::Client::new();
+            match client.head(&registry_url).send().await {
+                Ok(response) if response.status().is_success() => {
+                    // Registry is reachable, modify the command
+                    let command = format!("npm_config_registry={} npx", registry_url);
+                    return Ok((command, &self.args));
+                }
+                Ok(_) | Err(_) => {
+                    // Registry is not reachable or returned an error, use default
+                    Ok((self.command.clone(), &self.args))
+                }
+            }
+        } else {
+            Ok((self.command.clone(), &self.args))
+        }
+    }
+
     async fn spawn_process(&self) -> Result<(Child, ChildStdin, ChildStdout), Error> {
-        let mut process = Command::new(&self.command)
+        let (command, args) = if self.command == "npx" {
+            self.handle_npx().await?
+        } else {
+            (self.command.clone(), &self.args)
+        };
+
+        print!(
+            "\n\n\n--------> Spawning process: {} args: {:?}\n\n\n",
+            command, self.args
+        );
+
+        let mut process = Command::new(&command)
             .envs(&self.env)
-            .args(&self.args)
+            .args(args)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::inherit())
