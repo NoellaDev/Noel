@@ -90,6 +90,7 @@ impl AnthropicProvider {
             let role = match message.role {
                 Role::User => "user",
                 Role::Assistant => "assistant",
+                Role::Goose => continue,
             };
 
             let mut content = Vec::new();

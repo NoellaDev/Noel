@@ -20,6 +20,10 @@ pub fn messages_to_openai_spec(
 ) -> Vec<Value> {
     let mut messages_spec = Vec::new();
     for message in messages {
+        if message.role == Role::Goose {
+            continue;
+        }
+
         let mut converted = json!({
             "role": message.role
         });
@@ -378,8 +382,11 @@ mod tests {
 
     #[test]
     fn test_messages_to_openai_spec() -> anyhow::Result<()> {
-        let message = Message::user().with_text("Hello");
-        let spec = messages_to_openai_spec(&[message], &ImageFormat::OpenAi, false);
+        let messages = vec![
+            Message::user().with_text("Hello"),
+            Message::goose().with_text("Please don't notice me."),
+        ];
+        let spec = messages_to_openai_spec(&messages, &ImageFormat::OpenAi, false);
 
         assert_eq!(spec.len(), 1);
         assert_eq!(spec[0]["role"], "user");

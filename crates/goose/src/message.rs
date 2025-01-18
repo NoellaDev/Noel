@@ -142,6 +142,15 @@ impl Message {
         }
     }
 
+    /// Create a new user message with the current timestamp
+    pub fn goose() -> Self {
+        Message {
+            role: Role::Goose,
+            created: Utc::now().timestamp(),
+            content: Vec::new(),
+        }
+    }
+
     /// Add any MessageContent to the message
     pub fn with_content(mut self, content: MessageContent) -> Self {
         self.content.push(content);

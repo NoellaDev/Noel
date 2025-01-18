@@ -65,6 +65,7 @@ impl GoogleProvider {
     fn messages_to_google_spec(&self, messages: &[Message]) -> Vec<Value> {
         messages
             .iter()
+            .filter(|message| message.role != Role::Goose)
             .map(|message| {
                 let role = if message.role == Role::User {
                     "user"
@@ -457,6 +458,7 @@ mod tests {
         let messages = vec![
             set_up_text_message("Hello", Role::User),
             set_up_text_message("World", Role::Assistant),
+            set_up_text_message("Please don't notice me.", Role::Goose),
         ];
         let payload = provider.messages_to_google_spec(&messages);
         assert_eq!(payload.len(), 2);

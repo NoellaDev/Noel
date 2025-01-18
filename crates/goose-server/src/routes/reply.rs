@@ -270,6 +270,7 @@ async fn stream_message(
                 }
             }
         }
+        Role::Goose => (),
     }
     Ok(())
 }
