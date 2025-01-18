@@ -12,24 +12,24 @@ use crate::providers::base::Provider;
 use crate::providers::base::ProviderUsage;
 use crate::register_agent;
 use crate::token_counter::TokenCounter;
-use mcp_core::Tool;
+use mcp_core::{Role, Tool};
 use serde_json::Value;
 
 /// Agent impl. that truncates oldest messages when payload over LLM ctx-limit
 pub struct TruncateAgent {
     capabilities: Mutex<Capabilities>,
-    _token_counter: TokenCounter,
+    token_counter: TokenCounter,
 }
 
 impl TruncateAgent {
     pub fn new(provider: Box<dyn Provider>) -> Self {
         Self {
             capabilities: Mutex::new(Capabilities::new(provider)),
-            _token_counter: TokenCounter::new(),
+            token_counter: TokenCounter::new(),
         }
     }
 
-    async fn prepare_inference(
+    async fn enforce_ctx_limit_pre_flight(
         &self,
         system_prompt: &str,
         tools: &[Tool],
@@ -46,25 +46,22 @@ impl TruncateAgent {
 
         let model = Some(model_name);
         let approx_count =
-            self._token_counter
+            self.token_counter
                 .count_everything(system_prompt, messages, tools, &resources, model);
 
         let mut new_messages = messages.to_vec();
         if approx_count > target_limit {
-            let user_msg_size = self.text_content_size(new_messages.last(), model);
-            if user_msg_size > target_limit {
-                debug!(
-                    "[WARNING] User message {} exceeds token budget {}.",
-                    user_msg_size,
-                    user_msg_size - target_limit
-                );
-                return Err(SystemError::ContextLimit);
-            }
-
             new_messages = self.chop_front_messages(messages, approx_count, target_limit, model);
+
             if new_messages.is_empty() {
                 return Err(SystemError::ContextLimit);
             }
+
+            // add goose message
+            let alert_val = "Some of the oldest messages in the conversation history \
+            have been truncated to keep history within the LLM context-limit.";
+            let alert_msg = Message::goose().with_text(alert_val);
+            new_messages.push(alert_msg);
         }
 
         Ok(new_messages)
@@ -76,7 +73,7 @@ impl TruncateAgent {
             .and_then(|c| c.as_text());
 
         if let Some(txt) = text {
-            let count = self._token_counter.count_tokens(txt, model);
+            let count = self.token_counter.count_tokens(txt, model);
             return count;
         }
 
@@ -130,7 +127,7 @@ impl Agent for TruncateAgent {
         let mut capabilities = self.capabilities.lock().await;
         let tools = capabilities.get_prefixed_tools().await?;
         let system_prompt = capabilities.get_system_prompt().await;
-        let _estimated_limit = capabilities
+        let estimated_limit = capabilities
             .provider()
             .get_model_config()
             .get_estimated_limit();
@@ -146,11 +143,11 @@ impl Agent for TruncateAgent {
 
         // Update conversation history for the start of the reply
         let mut messages = self
-            .prepare_inference(
+            .enforce_ctx_limit_pre_flight(
                 &system_prompt,
                 &tools,
                 messages,
-                _estimated_limit,
+                estimated_limit,
                 &capabilities.provider().get_model_config().model_name,
                 &mut capabilities.get_resources().await?,
             )
@@ -159,16 +156,27 @@ impl Agent for TruncateAgent {
         Ok(Box::pin(async_stream::try_stream! {
             let _reply_guard = reply_span.enter();
             loop {
+                // keep goose messages in the history but dont send them to llm
+                let mut conv_history = messages.clone();
+                conv_history = conv_history.into_iter().filter(|msg| msg.role != Role::Goose).collect();
+
                 // Get completion from provider
                 let (response, usage) = capabilities.provider().complete(
                     &system_prompt,
-                    &messages,
+                    &conv_history,
                     &tools,
                 ).await?;
                 capabilities.record_usage(usage).await;
 
                 // Yield the assistant's response
                 yield response.clone();
+
+                // if ctx limit added goose message yield it
+                if let Some(msg) = messages.last() {
+                    if msg.role == Role::Goose {
+                        yield messages.last().unwrap().clone();
+                    }
+                }
 
                 tokio::task::yield_now().await;
 
@@ -203,15 +211,6 @@ impl Agent for TruncateAgent {
                 }
 
                 yield message_tool_response.clone();
-
-                messages = self.prepare_inference(
-                    &system_prompt,
-                    &tools,
-                    &messages,
-                    _estimated_limit,
-                    &capabilities.provider().get_model_config().model_name,
-                    &mut capabilities.get_resources().await?
-                ).await?;
 
                 messages.push(response);
                 messages.push(message_tool_response);
