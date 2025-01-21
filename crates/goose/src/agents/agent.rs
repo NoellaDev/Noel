@@ -24,7 +24,7 @@ pub trait Agent: Send + Sync {
     async fn list_systems(&self) -> Vec<String>;
 
     /// Pass through a JSON-RPC request to a specific system
-    async fn passthrough(&self, system: &str, request: Value) -> SystemResult<Value>;
+    async fn passthrough(&self, system: &str, method: &str, params: Value) -> SystemResult<Value>;
 
     /// Get the total usage of the agent
     async fn usage(&self) -> Vec<ProviderUsage>;

@@ -1,7 +1,11 @@
-use mcp_core::protocol::{
-    CallToolResult, Implementation, InitializeResult, JsonRpcError, JsonRpcMessage,
-    JsonRpcNotification, JsonRpcRequest, JsonRpcResponse, ListResourcesResult, ListToolsResult,
-    ReadResourceResult, ServerCapabilities, METHOD_NOT_FOUND,
+use mcp_core::{
+    prompt::Prompt,
+    protocol::{
+        CallToolResult, GetPromptResult, Implementation, InitializeResult, JsonRpcError,
+        JsonRpcMessage, JsonRpcNotification, JsonRpcRequest, JsonRpcResponse, ListPromptsResult,
+        ListResourcesResult, ListToolsResult, ReadResourceResult, ServerCapabilities,
+        METHOD_NOT_FOUND,
+    },
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -93,6 +97,12 @@ pub trait McpClientTrait: Send + Sync {
     async fn list_tools(&self, next_cursor: Option<String>) -> Result<ListToolsResult, Error>;
 
     async fn call_tool(&self, name: &str, arguments: Value) -> Result<CallToolResult, Error>;
+
+    async fn list_prompts(&self) -> Result<ListPromptsResult, Error>;
+
+    async fn get_prompt(&self, name: &str, arguments: Value) -> Result<GetPromptResult, Error>;
+
+    async fn forward_request(&self, method: &str, params: Value) -> Result<Value, Error>;
 }
 
 /// The MCP client is the interface for MCP operations.
@@ -124,7 +134,7 @@ where
     }
 
     /// Send a JSON-RPC request and check we don't get an error response.
-    async fn send_request<R>(&self, method: &str, params: Value) -> Result<R, Error>
+    pub async fn send_request<R>(&self, method: &str, params: Value) -> Result<R, Error>
     where
         R: for<'de> Deserialize<'de>,
     {
@@ -345,5 +355,42 @@ where
         // TODO ERROR: check that if there is an error, we send back is_error: true with msg
         // https://modelcontextprotocol.io/docs/concepts/tools#error-handling-2
         self.send_request("tools/call", params).await
+    }
+
+    async fn list_prompts(&self) -> Result<ListPromptsResult, Error> {
+        if !self.completed_initialization() {
+            return Err(Error::NotInitialized);
+        }
+        if self.server_capabilities.as_ref().unwrap().prompts.is_none() {
+            return Err(Error::RpcError {
+                code: METHOD_NOT_FOUND,
+                message: "Server does not support 'prompts' capability".to_string(),
+            });
+        }
+
+        self.send_request("prompts/list", serde_json::json!({}))
+            .await
+    }
+
+    async fn get_prompt(&self, name: &str, arguments: Value) -> Result<GetPromptResult, Error> {
+        if !self.completed_initialization() {
+            return Err(Error::NotInitialized);
+        }
+
+        if self.server_capabilities.as_ref().unwrap().prompts.is_none() {
+            return Err(Error::RpcError {
+                code: METHOD_NOT_FOUND,
+                message: "Server does not support 'prompts' capability".to_string(),
+            });
+        }
+
+        let params = serde_json::json!({ "name": name, "arguments": arguments });
+        // TODO ERROR: check that if there is an error, we send back is_error: true with msg
+        // https://modelcontextprotocol.io/docs/concepts/tools#error-handling-2
+        self.send_request("prompts/get", params).await
+    }
+
+    async fn forward_request(&self, method: &str, params: Value) -> Result<Value, Error> {
+        self.send_request(method, params).await
     }
 }
