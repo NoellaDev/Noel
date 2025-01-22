@@ -2,6 +2,9 @@ import React, { useRef, useState, useEffect } from "react";
 import { Button } from "./ui/button";
 import Stop from "./ui/Stop";
 import { Attach, Send } from "./icons";
+import { InputPreview } from "./InputPreview";
+import { FloatingToolbar } from "./FloatingToolbar";
+import { useSelectionCoords } from '../hooks/useSelectionCoords';
 
 interface InputProps {
   handleSubmit: (e: React.FormEvent) => void;
@@ -25,7 +28,14 @@ export default function Input({
   onStop,
 }: InputProps) {
   const [value, setValue] = useState("");
+  const [isPreview, setIsPreview] = useState(false);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const { selectionCoords, updateSelection, handleScroll, updateSelectionAfterFormat } = useSelectionCoords({
+    textAreaRef,
+    editorRef
+  });
 
   useEffect(() => {
     if (textAreaRef.current && !disabled) {
@@ -33,18 +43,45 @@ export default function Input({
     }
   }, [disabled, value]);
 
+  const [textAreaHeight, setTextAreaHeight] = useState<number>(0);
+  const [scrollPosition, setScrollPosition] = useState(0);
+
   const useAutosizeTextArea = (
     textAreaRef: HTMLTextAreaElement | null,
     value: string
   ) => {
     useEffect(() => {
       if (textAreaRef) {
-        textAreaRef.style.height = "0px"; // Reset height
+        // Store current scroll position
+        const scrollTop = textAreaRef.scrollTop;
+        
+        // Temporarily reset height to recalculate
+        textAreaRef.style.height = "0px";
         const scrollHeight = textAreaRef.scrollHeight;
-        textAreaRef.style.height = Math.min(scrollHeight, maxHeight) + "px";
+        
+        // Set new height
+        const newHeight = Math.min(scrollHeight, maxHeight);
+        textAreaRef.style.height = newHeight + "px";
+        setTextAreaHeight(newHeight);
+        
+        // Restore scroll position
+        textAreaRef.scrollTop = scrollTop;
       }
     }, [textAreaRef, value]);
   };
+
+  // Preserve height and scroll position when toggling preview mode
+  useEffect(() => {
+    if (textAreaRef.current && !isPreview) {
+      textAreaRef.current.style.height = `${textAreaHeight}px`;
+      // Restore scroll position after a brief delay to ensure the DOM has updated
+      requestAnimationFrame(() => {
+        if (textAreaRef.current) {
+          textAreaRef.current.scrollTop = scrollPosition;
+        }
+      });
+    }
+  }, [isPreview, textAreaHeight, scrollPosition]);
 
   const minHeight = "1rem";
   const maxHeight = 10 * 24;
@@ -82,30 +119,122 @@ export default function Input({
     }
   };
 
+  const handleTextChange = (newText: string, newSelectionStart: number, newSelectionEnd: number) => {
+    setValue(newText);
+    
+    // Use requestAnimationFrame to ensure DOM updates are complete
+    requestAnimationFrame(() => {
+      if (textAreaRef.current) {
+        textAreaRef.current.focus();
+        textAreaRef.current.setSelectionRange(newSelectionStart, newSelectionEnd);
+        updateSelectionAfterFormat(newSelectionStart, newSelectionEnd);
+      }
+    });
+  };
+
+  // Store scroll position before toggling preview
+  const handlePreviewToggle = () => {
+    if (textAreaRef.current) {
+      setScrollPosition(textAreaRef.current.scrollTop);
+    }
+    setIsPreview(!isPreview);
+  };
+
   return (
     <form
       onSubmit={onFormSubmit}
       className="flex relative h-auto px-[16px] pr-[68px] py-[1rem] border-t dark:border-gray-700"
     >
-      <textarea
-        autoFocus
-        id="dynamic-textarea"
-        placeholder="What should goose do?"
-        value={value}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        disabled={disabled}
-        ref={textAreaRef}
-        rows={1}
-        style={{
+      <div className="relative flex-1">
+        <div className="relative" style={{
           minHeight: `${minHeight}px`,
           maxHeight: `${maxHeight}px`,
-          overflowY: "auto",
-        }}
-        className={`w-full outline-none border-none focus:ring-0 bg-transparent p-0 text-14 resize-none ${
-          disabled ? "cursor-not-allowed opacity-50" : ""
-        }`}
-      />
+          height: 'auto'
+        }}>
+          {isPreview ? (
+            <InputPreview 
+              text={value} 
+              previewRef={previewRef}
+            />
+          ) : (
+            <>
+              <textarea
+                autoFocus
+                id="dynamic-textarea"
+                placeholder="What should goose do?"
+                value={value}
+                onChange={handleChange}
+                onKeyDown={handleKeyDown}
+                onSelect={updateSelection}
+                onScroll={handleScroll}
+                disabled={disabled}
+                ref={textAreaRef}
+                rows={1}
+                style={{
+                  minHeight: `${minHeight}px`,
+                  maxHeight: `${maxHeight}px`,
+                  overflowY: "auto",
+                  whiteSpace: 'pre-wrap',
+                  wordWrap: 'break-word'
+                }}
+                className={`w-full outline-none border-none focus:ring-0 bg-transparent p-0 text-14 resize-none ${
+                  disabled ? "cursor-not-allowed opacity-50" : ""
+                }`}
+              />
+              
+              {/* Hidden editor for measuring selection */}
+              <div
+                ref={editorRef}
+                className="absolute top-0 left-0 w-full invisible pointer-events-none whitespace-pre-wrap break-words"
+                style={{
+                  font: 'inherit',
+                  display: 'none'
+                }}
+              />
+            </>
+          )}
+          
+          {/* Floating toolbar rendered for both modes */}
+          {(selectionCoords && !isPreview) && (
+            <FloatingToolbar 
+              style={{
+                left: `${selectionCoords.x}px`,
+                top: `${selectionCoords.y}px`,
+                transform: 'translateY(-115%)',
+              }}
+              value={value}
+              selectionStart={selectionCoords.selectionStart || 0}
+              selectionEnd={selectionCoords.selectionEnd || 0}
+              onTextChange={handleTextChange}
+              selectedText={value.substring(
+                selectionCoords.selectionStart || 0,
+                selectionCoords.selectionEnd || 0
+              )}
+              isPreview={isPreview}
+              onPreviewToggle={handlePreviewToggle}
+              onSelectionUpdate={updateSelectionAfterFormat}
+            />
+          )}
+          {/* Show toolbar at top-left corner in preview mode */}
+          {isPreview && (
+            <FloatingToolbar 
+              style={{
+                left: 0,
+                top: '-4px',
+                transform: 'translateY(-115%)',
+              }}
+              value={value}
+              selectionStart={0}
+              selectionEnd={0}
+              onTextChange={handleTextChange}
+              selectedText=""
+              isPreview={isPreview}
+              onPreviewToggle={handlePreviewToggle}
+            />
+          )}
+        </div>
+      </div>
+
       <Button
         type="button"
         size="icon"
