@@ -65,6 +65,23 @@ impl EmbeddedResource {
             _ => String::new(),
         }
     }
+
+    pub fn get_uri(&self) -> Option<String> {
+        match &self.resource {
+            ResourceContents::TextResourceContents { uri, .. } => Some(uri.clone()),
+            _ => None,
+        }
+    }
+
+    pub fn set_text(&mut self, new_text: String) -> bool {
+        match &mut self.resource {
+            ResourceContents::TextResourceContents { text, .. } => {
+                *text = new_text;
+                true
+            }
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -306,5 +323,28 @@ mod tests {
         let content = Content::text("hello").with_audience(vec![Role::User]);
         assert_eq!(content.audience(), Some(&vec![Role::User]));
         assert_eq!(content.priority(), None);
+    }
+
+    #[test]
+    fn test_embedded_resource_methods() {
+        let content = Content::embedded_text("test.txt", "hello");
+        if let Content::Resource(resource) = content {
+            assert_eq!(resource.get_text(), "hello");
+            assert_eq!(resource.get_uri(), Some("test.txt".to_string()));
+        } else {
+            panic!("Expected Resource content");
+        }
+    }
+
+    #[test]
+    fn test_embedded_resource_set_text() {
+        let mut content = Content::embedded_text("test.txt", "hello");
+        if let Content::Resource(resource) = &mut content {
+            assert!(resource.set_text("world".to_string()));
+            assert_eq!(resource.get_text(), "world");
+            assert_eq!(resource.get_uri(), Some("test.txt".to_string()));
+        } else {
+            panic!("Expected Resource content");
+        }
     }
 }
