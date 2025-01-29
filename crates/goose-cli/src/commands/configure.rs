@@ -131,12 +131,20 @@ pub async fn handle_configure() -> Result<(), Box<dyn Error>> {
                 "Enable or disable connected extensions",
             )
             .item("add", "Add Extension", "Connect to a new extension")
+            .item(
+                "test",
+                "Test Connection",
+                "Test your current provider configuration",
+            )
+            .item("exit", "Exit", "Exit the configuration menu")
             .interact()?;
 
         match action {
             "toggle" => toggle_extensions_dialog(),
             "add" => configure_extensions_dialog(),
             "providers" => configure_provider_dialog().await.and(Ok(())),
+            "test" => test_provider_connection().await,
+            "exit" => Ok(()),
             _ => unreachable!(),
         }
     }
@@ -275,7 +283,7 @@ pub async fn configure_provider_dialog() -> Result<bool, Box<dyn Error>> {
 
     let result = provider
         .complete(
-            "You are an AI agent called Goose. You use tools of connected extensions to solve problems.",
+            "You are an AI agent called Goose. Your response should be brief.",
             &[message],
             &[]
         )
@@ -539,4 +547,50 @@ pub fn configure_extensions_dialog() -> Result<(), Box<dyn Error>> {
     };
 
     Ok(())
+}
+
+/// Test the current provider configuration by attempting to connect and send a test message
+pub async fn test_provider_connection() -> Result<(), Box<dyn Error>> {
+    let config = Config::global();
+    let provider_name: String = config.get("GOOSE_PROVIDER")?;
+    let model: String = config.get("GOOSE_MODEL")?;
+
+    let spin = spinner();
+    spin.start("Testing your configuration...");
+
+    let model_config = goose::model::ModelConfig::new(model.clone());
+    let provider = create(&provider_name, model_config)?;
+
+    let message = Message::user().with_text(
+        "Please give a nice welcome message (one sentence) and let them know they are all set to use this agent"
+    );
+
+    match provider
+        .complete(
+            "You are an AI agent called Goose. Your response should be brief.",
+            &[message],
+            &[],
+        )
+        .await
+    {
+        Ok((message, _usage)) => {
+            if let Some(content) = message.content.first() {
+                if let Some(text) = content.as_text() {
+                    spin.stop(text);
+                } else {
+                    spin.stop("No response text available");
+                }
+            } else {
+                spin.stop("No response content available");
+            }
+            let _ = cliclack::outro("Your configuration is working!");
+            Ok(())
+        }
+        Err(e) => {
+            println!("{:?}", e);
+            spin.stop("Connection test failed!");
+            let _ = cliclack::outro("The configured provider could not connect.");
+            Ok(())
+        }
+    }
 }
