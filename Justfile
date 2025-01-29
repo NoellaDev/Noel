@@ -33,11 +33,28 @@ copy-binary:
         exit 1; \
     fi
 
+# Copy Windows binary command
+copy-binary-windows:
+    @powershell.exe -Command "if (Test-Path ./target/x86_64-pc-windows-gnu/release/goosed.exe) { \
+        Write-Host 'Copying Windows binary to ui/desktop/src/bin...'; \
+        Copy-Item -Path './target/x86_64-pc-windows-gnu/release/goosed.exe' -Destination './ui/desktop/src/bin/' -Force; \
+    } else { \
+        Write-Host 'Windows binary not found.' -ForegroundColor Red; \
+        exit 1; \
+    }"
+
 # Run UI with latest
 run-ui:
     @just release
     @echo "Running UI..."
     cd ui/desktop && npm install && npm run start-gui
+
+# Run UI with latest (Windows version)
+run-ui-windows:
+    @just release-windows
+    @powershell.exe -Command "Write-Host 'Copying Windows binary...'"
+    @just copy-binary-windows
+    @powershell.exe -Command "Write-Host 'Running UI...'; Set-Location ui/desktop; npm install; npm run start-gui"
 
 # Run Docusaurus server for documentation
 run-docs:
