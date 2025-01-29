@@ -1,4 +1,5 @@
 import { FullExtensionConfig } from '../../extensions';
+import { GooseFreedom } from './freedom/FreedomLevel';
 
 export interface Model {
   id: string;
@@ -10,4 +11,5 @@ export interface Model {
 export interface Settings {
   models: Model[];
   extensions: FullExtensionConfig[];
+  freedom: GooseFreedom;
 }

@@ -2,6 +2,7 @@ import { getApiUrl, getSecretKey } from '../config';
 import { loadAndAddStoredExtensions } from '../extensions';
 import { GOOSE_PROVIDER } from '../env_vars';
 import { Model } from '../components/settings/models/ModelContext';
+import { GooseFreedom } from '../components/settings/freedom/FreedomLevel';
 
 export function getStoredProvider(config: any): string | null {
   console.log('config goose provider', config.GOOSE_PROVIDER);
@@ -24,6 +25,20 @@ export function getStoredModel(): string | null {
   }
 
   return null; // Return null if storedModel is not found
+}
+
+export function getStoredFreedomLevel(): GooseFreedom {
+  const settings = localStorage.getItem('user_settings');
+  if (settings) {
+    try {
+      const parsedSettings = JSON.parse(settings);
+      return parsedSettings.freedom || 'caged';
+    } catch (error) {
+      console.error('Error parsing user_settings from local storage:', error);
+      return 'caged';
+    }
+  }
+  return 'caged';
 }
 
 export interface Provider {
@@ -56,14 +71,18 @@ export async function getProvidersList(): Promise<Provider[]> {
   }));
 }
 
-const addAgent = async (provider: string, model: string) => {
+const addAgent = async (provider: string, model: string, freedom: GooseFreedom) => {
   const response = await fetch(getApiUrl('/agent'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'X-Secret-Key': getSecretKey(),
     },
-    body: JSON.stringify({ provider: provider, model: model }),
+    body: JSON.stringify({
+      provider: provider,
+      model: model,
+      freedom: freedom,
+    }),
   });
 
   if (!response.ok) {
@@ -76,7 +95,8 @@ const addAgent = async (provider: string, model: string) => {
 export const initializeSystem = async (provider: string, model: string) => {
   try {
     console.log('initializing agent with provider', provider, 'model', model);
-    await addAgent(provider.toLowerCase(), model);
+    const freedom = getStoredFreedomLevel();
+    await addAgent(provider.toLowerCase(), model, freedom);
 
     loadAndAddStoredExtensions().catch((error) => {
       console.error('Failed to load and add stored extension configs:', error);

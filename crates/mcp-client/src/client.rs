@@ -30,6 +30,9 @@ pub enum Error {
     #[error("Not initialized")]
     NotInitialized,
 
+    #[error("Forbidden")]
+    Forbidden(String),
+
     #[error("Timeout or service not ready")]
     NotReady,
 

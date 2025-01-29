@@ -6,6 +6,8 @@ mod factory;
 pub mod formats;
 pub mod google;
 pub mod groq;
+#[cfg(test)]
+pub mod mock;
 pub mod oauth;
 pub mod ollama;
 pub mod openai;

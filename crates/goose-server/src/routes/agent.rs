@@ -6,7 +6,11 @@ use axum::{
     Json, Router,
 };
 use goose::config::Config;
-use goose::{agents::AgentFactory, model::ModelConfig, providers};
+use goose::{
+    agents::{AgentFactory, GooseFreedom},
+    model::ModelConfig,
+    providers,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
@@ -22,6 +26,7 @@ struct CreateAgentRequest {
     version: Option<String>,
     provider: String,
     model: Option<String>,
+    freedom: Option<GooseFreedom>,
 }
 
 #[derive(Serialize)]
@@ -49,6 +54,16 @@ struct ProviderDetails {
 struct ProviderList {
     id: String,
     details: ProviderDetails,
+}
+
+#[derive(Deserialize)]
+struct SetFreedomLevelRequest {
+    freedom: GooseFreedom,
+}
+
+#[derive(Serialize)]
+struct SetFreedomLevelResponse {
+    freedom: GooseFreedom,
 }
 
 async fn get_versions() -> Json<VersionsResponse> {
@@ -97,7 +112,14 @@ async fn create_agent(
         .version
         .unwrap_or_else(|| AgentFactory::default_version().to_string());
 
-    let new_agent = AgentFactory::create(&version, provider).expect("Failed to create agent");
+    let mut new_agent = AgentFactory::create(&version, provider).expect("Failed to create agent");
+
+    // Set the initial freedom level if provided
+    if let Some(freedom) = payload.freedom {
+        new_agent.set_freedom_level(freedom).await;
+    } else {
+        new_agent.set_freedom_level(GooseFreedom::Caged).await; // Default to most restrictive
+    }
 
     let mut agent = state.agent.lock().await;
     *agent = Some(new_agent);
@@ -124,8 +146,33 @@ async fn list_providers() -> Json<Vec<ProviderList>> {
         })
         .collect();
 
-    // Return the response as JSON.
     Json(response)
+}
+
+async fn set_freedom_level(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<SetFreedomLevelRequest>,
+) -> Result<Json<SetFreedomLevelResponse>, StatusCode> {
+    // Verify secret key
+    let secret_key = headers
+        .get("X-Secret-Key")
+        .and_then(|value| value.to_str().ok())
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+
+    if secret_key != state.secret_key {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    // Update the agent's freedom level
+    let mut agent = state.agent.lock().await;
+    if let Some(agent) = agent.as_mut() {
+        agent.set_freedom_level(payload.freedom.clone()).await;
+    }
+
+    Ok(Json(SetFreedomLevelResponse {
+        freedom: payload.freedom,
+    }))
 }
 
 pub fn routes(state: AppState) -> Router {
@@ -133,5 +180,6 @@ pub fn routes(state: AppState) -> Router {
         .route("/agent/versions", get(get_versions))
         .route("/agent/providers", get(list_providers))
         .route("/agent", post(create_agent))
+        .route("/agent/freedom", post(set_freedom_level))
         .with_state(state)
 }

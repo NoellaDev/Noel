@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::state::AppState;
 use axum::{extract::State, routing::post, Json, Router};
 use goose::{
-    agents::{extension::Envs, ExtensionConfig},
+    agents::{extension::Envs, ExtensionConfig, GooseFreedom},
     config::Config,
 };
 use http::{HeaderMap, StatusCode};
@@ -70,6 +70,43 @@ async fn add_extension(
 
     if secret_key != state.secret_key {
         return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    // Get the current freedom level
+    let mut agent = state.agent.lock().await;
+    let agent = agent.as_mut().ok_or(StatusCode::PRECONDITION_REQUIRED)?;
+    let freedom = agent.get_freedom_level().await;
+
+    // Check freedom level restrictions
+    match freedom {
+        GooseFreedom::Caged => {
+            return Ok(Json(ExtensionResponse {
+                error: true,
+                message: Some("Extensions cannot be added in Caged mode".to_string()),
+            }));
+        }
+        GooseFreedom::CageFree => {
+            // Only allow built-in extensions
+            match &request {
+                ExtensionConfigRequest::Builtin { .. } => {}
+                _ => {
+                    return Ok(Json(ExtensionResponse {
+                        error: true,
+                        message: Some(
+                            "Only built-in extensions are allowed in Cage Free mode".to_string(),
+                        ),
+                    }));
+                }
+            }
+        }
+        GooseFreedom::FreeRange => {
+            // Allow built-in and external extensions
+            match &request {
+                ExtensionConfigRequest::Builtin { .. } => {}
+                ExtensionConfigRequest::Sse { .. } | ExtensionConfigRequest::Stdio { .. } => {}
+            }
+        }
+        GooseFreedom::Wild => {} // All extensions allowed
     }
 
     // Load the configuration
@@ -151,9 +188,7 @@ async fn add_extension(
         ExtensionConfigRequest::Builtin { name } => ExtensionConfig::Builtin { name },
     };
 
-    // Acquire a lock on the agent and attempt to add the extension.
-    let mut agent = state.agent.lock().await;
-    let agent = agent.as_mut().ok_or(StatusCode::PRECONDITION_REQUIRED)?;
+    // Attempt to add the extension.
     let response = agent.add_extension(extension_config).await;
 
     // Respond with the result.

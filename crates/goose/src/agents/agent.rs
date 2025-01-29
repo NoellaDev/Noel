@@ -1,11 +1,22 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::extension::{ExtensionConfig, ExtensionResult};
 use crate::message::Message;
 use crate::providers::base::ProviderUsage;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum GooseFreedom {
+    #[default]
+    Caged,
+    CageFree,
+    FreeRange,
+    Wild,
+}
 
 /// Core trait defining the behavior of an Agent
 #[async_trait]
@@ -28,4 +39,10 @@ pub trait Agent: Send + Sync {
 
     /// Get the total usage of the agent
     async fn usage(&self) -> Vec<ProviderUsage>;
+
+    /// Set the freedom level of the agent
+    async fn set_freedom_level(&mut self, freedom: GooseFreedom);
+
+    /// Get the current freedom level of the agent
+    async fn get_freedom_level(&self) -> GooseFreedom;
 }
