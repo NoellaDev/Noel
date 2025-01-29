@@ -1,4 +1,6 @@
 <h1 align="center">
+![img-dYQzZyXjxizMu0A7Ol7Es](https://github.com/user-attachments/assets/1775cb5f-134d-4057-98af-89f01ad9aa99)
+
 Noella
 </h1>
 
@@ -9,9 +11,6 @@ Noella
 <p align="center">
   <a href="https://opensource.org/licenses/Apache-2.0">
     <img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg">
-  </a>
-  <a href="https://discord.gg/7GaTvbDwga">
-    <img src="https://img.shields.io/discord/1287729918100246654?logo=discord&logoColor=white&label=Join+Us&color=blueviolet" alt="Discord">
   </a>
   <a href="https://github.com/block/goose/actions/workflows/ci.yml">
      <img src="https://img.shields.io/github/actions/workflow/status/block/goose/ci.yml?branch=main" alt="CI">
