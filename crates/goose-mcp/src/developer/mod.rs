@@ -14,8 +14,10 @@ use std::{
 use tokio::process::Command;
 use url::Url;
 
+use include_dir::{include_dir, Dir};
+use mcp_core::prompt::{Prompt, PromptArgument, PromptTemplate};
 use mcp_core::{
-    handler::{ResourceError, ToolError},
+    handler::{PromptError, ResourceError, ToolError},
     protocol::ServerCapabilities,
     resource::Resource,
     tool::Tool,
@@ -31,10 +33,57 @@ use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use xcap::{Monitor, Window};
 
+// Embeds the prompts directory to the build
+static PROMPTS_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/src/developer/prompts");
+
+/// Loads prompt files from the embedded PROMPTS_DIR and returns a HashMap of prompts.
+/// Ensures that each prompt name is unique.
+pub fn load_prompt_files() -> HashMap<String, Prompt> {
+    let mut prompts = HashMap::new();
+
+    for entry in PROMPTS_DIR.files() {
+        let prompt_str = String::from_utf8_lossy(entry.contents()).into_owned();
+
+        let template: PromptTemplate = match serde_json::from_str(&prompt_str) {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!(
+                    "Failed to parse prompt template in {}: {}",
+                    entry.path().display(),
+                    e
+                );
+                continue; // Skip invalid prompt file
+            }
+        };
+
+        let arguments = template
+            .arguments
+            .into_iter()
+            .map(|arg| PromptArgument {
+                name: arg.name,
+                description: arg.description,
+                required: arg.required,
+            })
+            .collect();
+
+        let prompt = Prompt::new(&template.id, &template.template, arguments);
+
+        if prompts.contains_key(&prompt.name) {
+            eprintln!("Duplicate prompt name '{}' found. Skipping.", prompt.name);
+            continue; // Skip duplicate prompt name
+        }
+
+        prompts.insert(prompt.name.clone(), prompt);
+    }
+
+    prompts
+}
+
 pub struct DeveloperRouter {
     tools: Vec<Tool>,
-    file_history: Arc<Mutex<HashMap<PathBuf, Vec<String>>>>,
+    prompts: Arc<HashMap<String, Prompt>>,
     instructions: String,
+    file_history: Arc<Mutex<HashMap<PathBuf, Vec<String>>>>,
 }
 
 impl Default for DeveloperRouter {
@@ -194,8 +243,9 @@ impl DeveloperRouter {
                 list_windows_tool,
                 screen_capture_tool,
             ],
-            file_history: Arc::new(Mutex::new(HashMap::new())),
+            prompts: Arc::new(load_prompt_files()),
             instructions,
+            file_history: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -645,7 +695,10 @@ impl Router for DeveloperRouter {
     }
 
     fn capabilities(&self) -> ServerCapabilities {
-        CapabilitiesBuilder::new().with_tools(false).build()
+        CapabilitiesBuilder::new()
+            .with_tools(false)
+            .with_prompts(false)
+            .build()
     }
 
     fn list_tools(&self) -> Vec<Tool> {
@@ -681,14 +734,58 @@ impl Router for DeveloperRouter {
     ) -> Pin<Box<dyn Future<Output = Result<String, ResourceError>> + Send + 'static>> {
         Box::pin(async move { Ok("".to_string()) })
     }
+
+    fn list_prompts(&self) -> Option<Vec<Prompt>> {
+        if self.prompts.is_empty() {
+            None
+        } else {
+            Some(self.prompts.values().cloned().collect())
+        }
+    }
+
+    fn get_prompt(
+        &self,
+        prompt_name: &str,
+    ) -> Option<Pin<Box<dyn Future<Output = Result<String, PromptError>> + Send + 'static>>> {
+        let prompt_name = prompt_name.trim().to_owned();
+
+        // Validate prompt name is not empty
+        if prompt_name.is_empty() {
+            return Some(Box::pin(async move {
+                Err(PromptError::InvalidParameters(
+                    "Prompt name cannot be empty".to_string(),
+                ))
+            }));
+        }
+
+        let prompts = Arc::clone(&self.prompts);
+
+        Some(Box::pin(async move {
+            match prompts.get(&prompt_name) {
+                Some(prompt) => {
+                    if prompt.description.trim().is_empty() {
+                        Err(PromptError::InternalError(format!(
+                            "Prompt '{prompt_name}' has an empty description"
+                        )))
+                    } else {
+                        Ok(prompt.description.clone())
+                    }
+                }
+                None => Err(PromptError::NotFound(format!(
+                    "Prompt '{prompt_name}' not found"
+                ))),
+            }
+        }))
+    }
 }
 
 impl Clone for DeveloperRouter {
     fn clone(&self) -> Self {
         Self {
             tools: self.tools.clone(),
-            file_history: Arc::clone(&self.file_history),
+            prompts: Arc::clone(&self.prompts),
             instructions: self.instructions.clone(),
+            file_history: Arc::clone(&self.file_history),
         }
     }
 }
