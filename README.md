@@ -1,5 +1,5 @@
 <h1 align="center">
-codename goose
+Noella
 </h1>
 
 <p align="center">
@@ -18,5 +18,5 @@ codename goose
   </a>
 </p>
 
-Check out our [documentation](https://block.github.io/goose), or to try it out head to the [installation](https://block.github.io/goose/docs/getting-started/installation) instructions!
+Check out our [Platform](https://block.github.io/goose), or to contac us head to the [Social](https://x.com/noelladotfun) instructions!
 
