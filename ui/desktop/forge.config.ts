@@ -40,7 +40,10 @@ module.exports = {
     },
     {
       name: '@electron-forge/maker-zip',
-      platforms: ['darwin'],
+      config: {
+        platforms: ['darwin'],
+        arch: process.env.ELECTRON_ARCH === 'x64' ? ['x64'] : ['arm64']
+      }
     },
     {
       name: '@electron-forge/maker-deb',
