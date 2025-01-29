@@ -1,7 +1,7 @@
 <h1 align="center">
 
 Noella
-<img ![img-dYQzZyXjxizMu0A7Ol7Es](https://github.com/user-attachments/assets/75c44ba2-5172-42bf-8a7c-a87788446fda)>
+![img-dYQzZyXjxizMu0A7Ol7Es](https://github.com/user-attachments/assets/75c44ba2-5172-42bf-8a7c-a87788446fda)
 
 </h1>
 
