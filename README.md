@@ -1,6 +1,6 @@
 <h1 align="center">
 
-![img-dYQzZyXjxizMu0A7Ol7Es](https://github.com/user-attachments/assets/75c44ba2-5172-42bf-8a7c-a87788446fda)
+
 Noella
 
 </h1>
